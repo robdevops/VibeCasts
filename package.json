@@ -4,6 +4,7 @@
   "main": "expo-router/entry",
   "dependencies": {
     "@expo/ui": "~57.0.25",
+    "@expo/vector-icons": "^15.1.1",
     "expo": "~57.0.30",
     "expo-asset": "~57.0.20",
     "expo-audio": "~57.0.5",
@@ -66,6 +67,9 @@
     "preset": "jest-expo",
     "setupFilesAfterEnv": [
       "@testing-library/react-native/matchers"
-    ]
+    ],
+    "moduleNameMapper": {
+      "\\.css$": "<rootDir>/tools/style-mock.js"
+    }
   }
 }

@@ -5,16 +5,17 @@ import { useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
+import { useFeeds } from '@/store/feeds';
 import { useLibrary } from '@/store/library';
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
-  const hydrate = useLibrary((s) => s.hydrate);
   useEffect(() => {
-    void hydrate();
-  }, [hydrate]);
+    void useLibrary.getState().hydrate();
+    void useFeeds.getState().hydrate();
+  }, []);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

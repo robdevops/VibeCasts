@@ -1,4 +1,4 @@
-import { isFinished, progressFraction, timeLeftLabel } from './episode-state';
+import { isFinished, progressFraction, timeLeftLabel, unplayedCount } from './episode-state';
 
 const base = { progressMs: 0, played: false, starred: false, archived: false };
 
@@ -16,4 +16,14 @@ it('computes ring fraction', () => {
 it('labels time left', () => {
   expect(timeLeftLabel(undefined, 1620)).toBe('27m');
   expect(timeLeftLabel({ ...base, progressMs: 1_500_000 }, 1620)).toBe('2m left');
+});
+
+it('counts unplayed, skipping played and archived', () => {
+  const eps = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }];
+  const states = {
+    'p|a': { ...base, played: true },
+    'p|b': { ...base, archived: true },
+    'p|c': { ...base, progressMs: 10 },
+  };
+  expect(unplayedCount('p', eps, states)).toBe(2);
 });

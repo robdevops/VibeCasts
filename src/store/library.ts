@@ -3,8 +3,9 @@ import { create } from 'zustand';
 import type { Podcast } from '@/api/types';
 import { kv } from '@/db/kv';
 import type { KV } from '@/db/storage';
-import { emptyEpisodeState, type EpisodeState } from '@/lib/episode-state';
-import { reorder, tileKey, type TileRef } from '@/lib/layout';
+import { emptyEpisodeState, episodeKey, type EpisodeState } from '@/lib/episode-state';
+import { tileKey, type TileRef } from '@/lib/layout';
+import type { PodcastSort } from '@/lib/podcast-sort';
 
 export type Subscription = {
   podcast: Podcast;
@@ -19,9 +20,8 @@ export type Subscription = {
   };
 };
 
-export type Folder = { id: string; name: string; color: string };
+export type Folder = { id: string; name: string; color: string; createdAt?: number };
 
-export type PodcastSort = 'recent' | 'title' | 'added' | 'custom';
 
 export type LibraryData = {
   subscriptions: Record<string, Subscription>;
@@ -44,7 +44,9 @@ type Actions = {
   deleteFolder(folderId: string): void;
   moveToFolder(podcastId: string, folderId: string): void;
   removeFromFolder(podcastId: string): void;
-  reorderHome(from: number, to: number): void;
+  setHomeOrder(keys: string[]): void;
+  setFolderOrder(folderId: string, ids: string[]): void;
+  renameFolder(folderId: string, name: string, color?: string): void;
   patchEpisode(episodeKey: string, patch: Partial<EpisodeState>): void;
   setOverride(podcastId: string, patch: Subscription['overrides']): void;
   setLayout(l: LibraryData['layout']): void;
@@ -63,8 +65,7 @@ const initial: LibraryData = {
   sort: 'custom',
 };
 
-/** Episode state is keyed by `${podcastId}|${episodeId}`. */
-export const episodeKey = (podcastId: string, episodeId: string) => `${podcastId}|${episodeId}`;
+export { episodeKey };
 
 const STORAGE_KEY = 'library.v1';
 
@@ -110,7 +111,7 @@ export function createLibraryStore(storage: KV = kv) {
     createFolder(name, color) {
       const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
       set((s) => ({
-        folders: { ...s.folders, [id]: { id, name, color } },
+        folders: { ...s.folders, [id]: { id, name, color, createdAt: Date.now() } },
         folderOrder: { ...s.folderOrder, [id]: [] },
         homeOrder: [...s.homeOrder, tileKey({ type: 'folder', id })],
       }));
@@ -166,7 +167,14 @@ export function createLibraryStore(storage: KV = kv) {
       });
     },
 
-    reorderHome: (from, to) => set((s) => ({ homeOrder: reorder(s.homeOrder, from, to), sort: 'custom' })),
+    setHomeOrder: (keys) => set({ homeOrder: keys, sort: 'custom' }),
+    setFolderOrder: (folderId, ids) => set((s) => ({ folderOrder: { ...s.folderOrder, [folderId]: ids } })),
+    renameFolder(folderId, name, color) {
+      set((s) => {
+        const f = s.folders[folderId];
+        return f ? { folders: { ...s.folders, [folderId]: { ...f, name, color: color ?? f.color } } } : s;
+      });
+    },
 
     patchEpisode(key, patch) {
       set((s) => ({

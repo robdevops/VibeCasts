@@ -10,3 +10,7 @@ export function reorder<T>(list: T[], from: number, to: number): T[] {
   next.splice(to, 0, item);
   return next;
 }
+
+export function parseKey(key: string): TileRef {
+  return { type: key.startsWith('f:') ? 'folder' : 'podcast', id: key.slice(2) };
+}
