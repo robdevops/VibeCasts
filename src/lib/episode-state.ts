@@ -37,3 +37,20 @@ export function timeLeftLabel(state: EpisodeState | undefined, durationSec: numb
   const label = m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${Math.max(m, leftSec > 0 ? 1 : 0)}m`;
   return state && state.progressMs > 0 && !state.played ? `${label} left` : label;
 }
+
+/** Episode state is keyed by `${podcastId}|${episodeId}`. */
+export const episodeKey = (podcastId: string, episodeId: string) => `${podcastId}|${episodeId}`;
+
+/** Episodes neither played nor archived. */
+export function unplayedCount(
+  podcastId: string,
+  episodes: readonly { id: string }[],
+  states: Record<string, EpisodeState | undefined>,
+): number {
+  let n = 0;
+  for (const e of episodes) {
+    const s = states[episodeKey(podcastId, e.id)];
+    if (!s?.played && !s?.archived) n++;
+  }
+  return n;
+}
