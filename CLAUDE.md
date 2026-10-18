@@ -1,6 +1,6 @@
 # mobiletest
 
-Expo (SDK 58) + React Native + TypeScript + Expo Router app for experimenting with small app clones. Read `AGENTS.md` first: Expo APIs change every SDK, so check the versioned docs before touching them.
+Expo (SDK 57, to match the store build of Expo Go) + React Native + TypeScript + Expo Router app for experimenting with small app clones. Read `AGENTS.md` first: Expo APIs change every SDK, so check the versioned docs before touching them.
 
 ## Commands
 - `npm run web`: dev server for the web target on :8081 (`expo start --web`)

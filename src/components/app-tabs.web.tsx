@@ -31,7 +31,6 @@ export default function AppTabs() {
 
 function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
   return (
-    // @ts-expect-error expo-router/ui TabTriggerSlotProps ref typing mismatch
     <Pressable {...props} style={styles.button}>
       <ThemedText type="smallBold" themeColor={isFocused ? 'accent' : 'textSecondary'}>
         {children}
