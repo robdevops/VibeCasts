@@ -50,8 +50,8 @@ export function seed({ unplayed = [99, 12, 3, 40, 7, 0, 20, 5, 1, 60] } = {}) {
     homeOrder: ['f:fa', 'f:fb', 'p:100', 'p:101', 'p:102', 'p:103', 'p:104', 'p:109'],
     folderOrder: { fa: ['105', '106'], fb: ['107', '108'] },
     episodes: {
-      '100|e0': { progressMs: 900_000, played: false, starred: true, archived: false },
-      '100|e1': { progressMs: 0, played: true, starred: false, archived: false },
+      '100|e0': { progressMs: 900_000, played: false, starred: true, archived: false, lastPlayed: 1_760_000_100_000 },
+      '100|e1': { progressMs: 0, played: true, starred: false, archived: false, lastPlayed: 1_760_000_000_000 },
       '100|e2': { progressMs: 0, played: false, starred: false, archived: true },
       '100|e3': { progressMs: 1_620_000, played: false, starred: false, archived: false },
     },

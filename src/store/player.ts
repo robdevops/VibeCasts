@@ -6,7 +6,7 @@ import { kv } from '@/db/kv';
 import type { KV } from '@/db/storage';
 import { emptyEpisodeState, episodeKey, isFinished } from '@/lib/episode-state';
 import { clampSeek, reachedSkipLast, startPosition } from '@/lib/player-math';
-import { resumeFrom, shouldRestartSleep } from '@/lib/playback-rules';
+import { isPlausibleAdvance, resumeFrom, shouldRestartSleep } from '@/lib/playback-rules';
 import { createFileEpisodeCache, type EpisodeCache } from '@/downloads/episode-cache';
 import { createExpoEngine, type EngineStatus, type PlayerEngine } from '@/player/engine';
 import { confirmStreaming } from '@/player/stream-guard';
@@ -90,6 +90,10 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
   let playRequest = 0;
   // Where a load that failed before playing began, so a retry doesn't back up (resume) again.
   let failedStart: number | null = null;
+  // Last position observed while playing normally, to check the next one against the clock.
+  let tick: { pos: number; at: number } | null = null;
+  // After a runaway was caught: ignore positions until the player is back near `good`.
+  let recovering: { good: number; until: number } | null = null;
   let sleepTimer: ReturnType<typeof setTimeout> | undefined;
 
   const store = create<PlayerData & Actions>()((set, get) => {
@@ -146,6 +150,7 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
     const resumeLoaded = () => {
       if (settings.getState().intelligentResume && livePosition > 0) {
         livePosition = resumeFrom(livePosition, true);
+        tick = null;
         engine.seekTo(livePosition);
         if (appState.isActive()) set({ positionSec: livePosition });
       }
@@ -164,6 +169,18 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
       set({ sleep: null, playing: false });
       saveProgress();
       engine.pause();
+    };
+
+    /** The player jumped ahead faster than the clock allows: put the user back where they were. */
+    const recoverFromRunaway = () => {
+      const good = livePosition;
+      tick = null;
+      recovering = { good, until: now() + 5000 };
+      set({ playing: false, buffering: false, ...(appState.isActive() ? { positionSec: good } : null) });
+      engine.pause();
+      engine.seekTo(good);
+      saveProgress(); // saves the good position, never the runaway one
+      useToast.getState().show('Playback glitched, so I paused it and kept your place.');
     };
 
     const finish = () => {
@@ -197,6 +214,26 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
         set({ playing: false, buffering: false });
         useToast.getState().show("Couldn't play this episode. Check your connection and try again.");
         return;
+      }
+      if (recovering) {
+        // Still catching up after a runaway: only trust positions near the restored spot.
+        if (Math.abs(s.positionSec - recovering.good) <= 5) recovering = null;
+        else if (now() < recovering.until) return;
+        else recovering = null;
+      }
+      // Plausibility: the position can't advance faster than the clock allows.
+      const t = now();
+      if (s.loaded) {
+        if (
+          tick &&
+          !isPlausibleAdvance({ fromSec: tick.pos, toSec: s.positionSec, wallSec: (t - tick.at) / 1000, rate: get().rate })
+        ) {
+          // Playing (or "finishing") far ahead of the clock is a runaway: put the user back.
+          // An odd position from a paused player is just a stale event, so ignore it.
+          if (s.playing || s.finished) recoverFromRunaway();
+          return;
+        }
+        tick = { pos: s.positionSec, at: t };
       }
       const prevPlaying = get().playing;
       if (s.loaded) livePosition = s.positionSec;
@@ -241,6 +278,8 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
       const rate = settings.getState().playbackRate;
       engine.load(downloaded ?? cache?.uriFor(key) ?? episode.audioUrl, startSec, rate, metaOf({ podcast, episode }));
       loadedKey = key;
+      tick = null;
+      recovering = null;
       failedStart = null;
       lastSavedSec = startSec;
       livePosition = startSec;
@@ -259,6 +298,7 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
       const c = get().current;
       if (!c || loadedKey !== key || keyOf() !== key) return;
       const wasPlaying = get().playing;
+      tick = null;
       engine.load(uri, livePosition, get().rate, metaOf(c));
       if (wasPlaying) engine.play();
     };
@@ -372,6 +412,7 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
         if (!current) return;
         const target = clampSeek(sec, durationSec || current.episode.durationSec);
         livePosition = target;
+        tick = null;
         set({ positionSec: target });
         if (loadedKey === keyOf()) engine.seekTo(target);
         saveProgress();

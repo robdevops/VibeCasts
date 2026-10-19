@@ -47,17 +47,29 @@ function setup(opts: { now?: () => number; active?: boolean; beforeStream?: (e: 
   const settings = createSettingsStore(createMemoryKV());
   library.getState().subscribe(podcast);
   const fakeCache = createFakeEpisodeCache();
+  // A controllable clock. `emit` advances it by the played distance, like real playback does;
+  // `jump` reports a position without any time passing (what a runaway player looks like).
+  let clockMs = 1_000_000;
+  const now = opts.now ?? (() => clockMs);
+  const emit: typeof fake.emit = (over) => {
+    // Time passes in proportion to the distance played since the engine last reported.
+    if (!opts.now && over?.positionSec !== undefined && (over.playing !== false || over.finished)) {
+      clockMs += Math.max(0, over.positionSec - fake.state.position) * 1000;
+    }
+    fake.emit(over);
+  };
+  const jump: typeof fake.emit = (over) => fake.emit(over);
   const player = createPlayerStore({
     engine: fake.engine,
     storage,
     library,
     settings,
-    now: opts.now,
+    now,
     appState: app.appState,
     beforeStream: opts.beforeStream,
     cache: opts.cache ? fakeCache.cache : undefined,
   });
-  return { ...fake, storage, library, settings, player, setActive: app.set, fakeCache };
+  return { ...fake, emit, jump, advance: (ms: number) => (clockMs += ms), storage, library, settings, player, setActive: app.set, fakeCache };
 }
 
 it('plays an episode, loading it with lock-screen metadata inputs and the saved rate', () => {
@@ -174,6 +186,7 @@ it('can cancel the sleep timer', () => {
 it('persists the current episode and restores it paused after a restart', async () => {
   const t = setup();
   t.player.getState().play(episode, podcast);
+  t.emit({ positionSec: 120, playing: true });
   t.emit({ positionSec: 120, playing: false });
   await Promise.resolve();
 
@@ -520,5 +533,77 @@ describe('cache whole episodes', () => {
     t.player.getState().play(episode, podcast);
     expect(beforeStream).not.toHaveBeenCalled();
     expect(t.calls[0]).toContain('load file:///cache/p|e.mp3');
+  });
+});
+
+describe('runaway playback (position jumps ahead of the clock)', () => {
+  it('pauses, restores the last good position and never saves the runaway one', () => {
+    const t = setup();
+    t.player.getState().play(episode, podcast);
+    t.emit({ positionSec: 1, playing: true });
+    t.emit({ positionSec: 2, playing: true });
+    t.emit({ positionSec: 7, playing: true }); // fine: 5 s of playing
+    t.calls.length = 0;
+
+    t.jump({ positionSec: 1500, playing: true }); // silent run-through, no time passed
+    expect(t.player.getState().playing).toBe(false);
+    expect(t.player.getState().positionSec).toBe(7);
+    expect(t.calls).toEqual(['pause', 'seek 7']);
+    expect(t.library.getState().episodes[key]).toMatchObject({ progressMs: 7000, played: false });
+    expect(useToast.getState().message).toMatch(/kept your place/);
+  });
+
+  it('does not mark the episode played when a runaway reaches the end', () => {
+    const t = setup();
+    t.player.getState().play(episode, podcast);
+    t.emit({ positionSec: 100, playing: true });
+    t.emit({ positionSec: 105, playing: true });
+    t.jump({ positionSec: 1800, finished: true, playing: false });
+    expect(t.library.getState().episodes[key]?.played).not.toBe(true);
+    expect(t.library.getState().episodes[key]?.progressMs).toBe(105_000);
+    expect(t.player.getState().positionSec).toBe(105);
+  });
+
+  it('ignores the stale runaway events that arrive while it recovers', () => {
+    const t = setup();
+    t.player.getState().play(episode, podcast);
+    t.emit({ positionSec: 50, playing: true });
+    t.emit({ positionSec: 55, playing: true });
+    t.jump({ positionSec: 1700, playing: true });
+    t.jump({ positionSec: 1701, playing: false }); // late event from the pause we issued
+    expect(t.player.getState().positionSec).toBe(55);
+    expect(t.library.getState().episodes[key].progressMs).toBe(55_000);
+    t.emit({ positionSec: 55, playing: false }); // the seek landed
+    expect(t.player.getState().positionSec).toBe(55);
+  });
+
+  it('accepts a long gap that matches the clock (app asleep, audio kept playing)', () => {
+    const t = setup();
+    t.player.getState().play(episode, podcast);
+    t.emit({ positionSec: 100, playing: true });
+    t.advance(20 * 60_000); // 20 minutes pass with no events
+    t.jump({ positionSec: 100 + 20 * 60, playing: true });
+    expect(t.player.getState().playing).toBe(true);
+    expect(t.library.getState().episodes[key].progressMs).toBe((100 + 1200) * 1000);
+  });
+
+  it('catches a runaway even after a long silent gap, when the clock cannot explain it', () => {
+    const t = setup();
+    t.player.getState().play(episode, podcast);
+    t.emit({ positionSec: 100, playing: true });
+    t.advance(10 * 60_000); // locked for 10 minutes
+    t.jump({ positionSec: 1800, finished: true, playing: false }); // but it "played" 28 minutes
+    expect(t.library.getState().episodes[key]?.played).not.toBe(true);
+    expect(t.player.getState().positionSec).toBe(100);
+  });
+
+  it('a seek is not a runaway', () => {
+    const t = setup();
+    t.player.getState().play(episode, podcast);
+    t.emit({ positionSec: 10, playing: true });
+    t.player.getState().seekTo(900);
+    t.emit({ positionSec: 900, playing: true });
+    expect(t.player.getState().playing).toBe(true);
+    expect(t.player.getState().positionSec).toBe(900);
   });
 });
