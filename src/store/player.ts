@@ -6,9 +6,10 @@ import { kv } from '@/db/kv';
 import type { KV } from '@/db/storage';
 import { emptyEpisodeState, episodeKey, isFinished } from '@/lib/episode-state';
 import { clampSeek, reachedSkipLast, startPosition } from '@/lib/player-math';
-import { isPlausibleAdvance, resumeFrom, shouldRestartSleep } from '@/lib/playback-rules';
+import { isLostPlace, isPlausibleAdvance, resumeFrom, shouldRestartSleep } from '@/lib/playback-rules';
 import { createFileEpisodeCache, type EpisodeCache } from '@/downloads/episode-cache';
 import { createExpoEngine, type EngineStatus, type PlayerEngine } from '@/player/engine';
+import { playerLog, type EventLog } from '@/player/event-log';
 import { confirmStreaming } from '@/player/stream-guard';
 
 import { useLibrary } from './library';
@@ -54,11 +55,18 @@ type Deps = {
   beforeStream: (episode: Episode) => Promise<boolean>;
   /** Temporary whole-episode cache ("cache whole episodes"). Absent where unsupported (web). */
   cache: EpisodeCache;
+  /** Rolling record of player events, for diagnosing failures after the fact. */
+  log: EventLog;
 };
 
 const STORAGE_KEY = 'player.v1';
 /** How often (in played seconds) progress is written to the library while playing. */
 const SAVE_EVERY_SEC = 5;
+/** How long a load or recovery may take to reach the expected position before it is retried. */
+const LOAD_GRACE_MS = 15_000;
+/** After pressing play on a loaded episode, how long to wait for any sign of life from the player. */
+const WAKE_CHECK_MS = 3000;
+const HEARTBEAT_MS = 5 * 60_000;
 
 export function createPlayerStore(deps: Partial<Deps> = {}) {
   const engine = deps.engine ?? createExpoEngine();
@@ -67,6 +75,7 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
   const settings = deps.settings ?? useSettings;
   const now = deps.now ?? Date.now;
   const cache = deps.cache;
+  const log = deps.log ?? playerLog;
   const appState =
     deps.appState ??
     ({
@@ -92,8 +101,14 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
   let failedStart: number | null = null;
   // Last position observed while playing normally, to check the next one against the clock.
   let tick: { pos: number; at: number } | null = null;
-  // After a runaway was caught: ignore positions until the player is back near `good`.
-  let recovering: { good: number; until: number } | null = null;
+  // After a load or a recovery: the position we expect the player to reach. Until it does, whatever
+  // it reports (typically 0:00 before the start seek applies) is ignored, never adopted or saved.
+  let expecting: { pos: number; until: number; reloads: number } | null = null;
+  // When a status that said "loaded" last arrived, and the timer that checks the player woke up.
+  let lastLoadedAt = 0;
+  let wakeCheck: ReturnType<typeof setTimeout> | undefined;
+  let lastLogged = '';
+  let lastBeat = 0;
   let sleepTimer: ReturnType<typeof setTimeout> | undefined;
 
   const store = create<PlayerData & Actions>()((set, get) => {
@@ -111,11 +126,13 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
     };
 
     /** Write the position into the library; counts as played once near the end. */
-    const saveProgress = () => {
+    const saveProgress = (allowRewind = false) => {
       const { current } = get();
       const positionSec = livePosition;
       const key = keyOf();
       if (!current || !key) return;
+      // Last line of defence: never write "back at the start" over a real place unless the user asked.
+      if (!allowRewind && isLostPlace({ knownSec: lastSavedSec, reportedSec: positionSec })) return;
       lastSavedSec = positionSec;
       const dur = liveDuration || current.episode.durationSec;
       if (isFinished(positionSec * 1000, dur)) {
@@ -155,6 +172,17 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
         if (appState.isActive()) set({ positionSec: livePosition });
       }
       startPlayback();
+      // A player that was reset or killed in the background never answers: if nothing loaded
+      // reports back soon after pressing play, load the episode again at the known place.
+      const pressedAt = now();
+      if (wakeCheck) clearTimeout(wakeCheck);
+      wakeCheck = setTimeout(() => {
+        wakeCheck = undefined;
+        if (lastLoadedAt >= pressedAt || !get().current || loadedKey !== keyOf()) return;
+        log.add('no-response', { pos: livePosition });
+        reloadAt(livePosition, 1);
+        engine.play();
+      }, WAKE_CHECK_MS);
     };
 
     const clearSleepTimer = () => {
@@ -171,16 +199,68 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
       engine.pause();
     };
 
+    const sourceFor = (key: string, episode: Episode) =>
+      library.getState().episodes[key]?.downloadedUri ?? cache?.uriFor(key) ?? episode.audioUrl;
+
+    /**
+     * Put a fresh source on the player at `pos`, paused. A seek on a player that has lost its
+     * source or been reset is dropped, but loading again applies the start position reliably.
+     */
+    const reloadAt = (pos: number, reloads: number) => {
+      const c = get().current;
+      const key = keyOf();
+      if (!c || !key) return;
+      tick = null;
+      livePosition = pos;
+      expecting = { pos, until: now() + LOAD_GRACE_MS, reloads };
+      engine.load(sourceFor(key, c.episode), pos, get().rate, metaOf(c));
+      loadedKey = key;
+      log.add('reload', { pos, left: reloads });
+    };
+
     /** The player jumped ahead faster than the clock allows: put the user back where they were. */
     const recoverFromRunaway = () => {
       const good = livePosition;
-      tick = null;
-      recovering = { good, until: now() + 5000 };
+      log.add('runaway', { good });
       set({ playing: false, buffering: false, ...(appState.isActive() ? { positionSec: good } : null) });
+      // Expect the place first, so the status the pause emits isn't judged against the old state.
+      reloadAt(good, 1);
       engine.pause();
-      engine.seekTo(good);
       saveProgress(); // saves the good position, never the runaway one
       useToast.getState().show('Playback glitched, so I paused it and kept your place.');
+    };
+
+    /** The player fell back to 0:00 on its own: keep the place we know and reload there. */
+    const recoverFromLostPlace = (reported: number) => {
+      const good = livePosition;
+      log.add('lost-place', { good, reported });
+      set({ playing: false, buffering: false, ...(appState.isActive() ? { positionSec: good } : null) });
+      // Expect the place first, so the status the pause emits isn't judged against the old state.
+      reloadAt(good, 1);
+      engine.pause();
+      useToast.getState().show('Playback was interrupted, so I paused it and kept your place.');
+    };
+
+    /** The reload didn't get back to the place either: stay paused; the next play loads afresh there. */
+    const giveUpRecovering = () => {
+      log.add('gave-up', { pos: livePosition });
+      expecting = null;
+      loadedKey = null;
+      failedStart = livePosition;
+      engine.pause();
+      set({ playing: false, buffering: false, ...(appState.isActive() ? { positionSec: livePosition } : null) });
+      useToast.getState().show("Couldn't restart playback, but your place is saved. Press play to try again.");
+    };
+
+    /** Log changes of player state (not every position tick), plus a slow heartbeat for long listens. */
+    const logStatus = (s: EngineStatus) => {
+      const sig = `${s.playing ? 'playing' : 'paused'} ${s.loaded ? 'loaded' : 'unloaded'}${s.buffering ? ' buffering' : ''}${s.error ? ' ERROR' : ''}`;
+      const t = now();
+      if (sig !== lastLogged || t - lastBeat >= HEARTBEAT_MS) {
+        lastLogged = sig;
+        lastBeat = t;
+        log.add(sig, { pos: s.positionSec, dur: s.durationSec, fg: appState.isActive() });
+      }
     };
 
     const finish = () => {
@@ -189,8 +269,10 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
       if (!current || !key) return;
       // Unload first so the status update from pausing is ignored rather than re-saved.
       loadedKey = null;
+      expecting = null;
       clearSleepTimer();
       lastPauseAt = now();
+      log.add('finished');
       cache?.release(key); // finished: the temporary file is no longer needed
       library.getState().patchEpisode(key, { played: true, progressMs: 0, lastPlayed: now() });
       // Leave the episode selected but rewound, so pressing play again starts it over.
@@ -215,11 +297,34 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
         useToast.getState().show("Couldn't play this episode. Check your connection and try again.");
         return;
       }
-      if (recovering) {
-        // Still catching up after a runaway: only trust positions near the restored spot.
-        if (Math.abs(s.positionSec - recovering.good) <= 5) recovering = null;
-        else if (now() < recovering.until) return;
-        else recovering = null;
+      if (s.loaded) {
+        lastLoadedAt = now();
+        if (wakeCheck) clearTimeout(wakeCheck);
+        wakeCheck = undefined;
+      }
+      logStatus(s);
+      if (expecting) {
+        // Still getting to the position we asked for: only trust positions near it.
+        if (s.loaded && Math.abs(s.positionSec - expecting.pos) <= 5) {
+          expecting = null;
+        } else {
+          const t = now();
+          if (t > expecting.until) {
+            if (!s.loaded) expecting.until = t + LOAD_GRACE_MS; // still loading: keep waiting
+            else if (expecting.reloads > 0) reloadAt(expecting.pos, expecting.reloads - 1);
+            else giveUpRecovering();
+          }
+          // Play/pause and buffering still show, but this position is never adopted or saved.
+          const flags: Partial<PlayerData> = {};
+          if (s.playing !== get().playing && loadedKey) flags.playing = s.playing;
+          if (s.buffering !== get().buffering) flags.buffering = s.buffering;
+          if (Object.keys(flags).length > 0) set(flags);
+          return;
+        }
+      }
+      if (s.loaded && isLostPlace({ knownSec: livePosition, reportedSec: s.positionSec })) {
+        recoverFromLostPlace(s.positionSec);
+        return;
       }
       // Plausibility: the position can't advance faster than the clock allows.
       const t = now();
@@ -269,17 +374,18 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
 
     // Back in the foreground: catch the UI up to where playback got to while it wasn't watching.
     appState.subscribe((active) => {
+      log.add(active ? 'app foreground' : 'app background', { pos: livePosition });
       if (active && get().current) set({ positionSec: livePosition, durationSec: liveDuration || get().durationSec });
     });
 
     const load = (episode: Episode, podcast: Podcast, startSec: number) => {
       const key = episodeKey(podcast.id, episode.id);
-      const downloaded = library.getState().episodes[key]?.downloadedUri;
       const rate = settings.getState().playbackRate;
-      engine.load(downloaded ?? cache?.uriFor(key) ?? episode.audioUrl, startSec, rate, metaOf({ podcast, episode }));
+      engine.load(sourceFor(key, episode), startSec, rate, metaOf({ podcast, episode }));
+      log.add('load', { startSec, rate });
       loadedKey = key;
       tick = null;
-      recovering = null;
+      expecting = startSec > 5 ? { pos: startSec, until: now() + LOAD_GRACE_MS, reloads: 1 } : null;
       failedStart = null;
       lastSavedSec = startSec;
       livePosition = startSec;
@@ -299,6 +405,7 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
       if (!c || loadedKey !== key || keyOf() !== key) return;
       const wasPlaying = get().playing;
       tick = null;
+      expecting = livePosition > 5 ? { pos: livePosition, until: now() + LOAD_GRACE_MS, reloads: 1 } : null;
       engine.load(uri, livePosition, get().rate, metaOf(c));
       if (wasPlaying) engine.play();
     };
@@ -415,7 +522,9 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
         tick = null;
         set({ positionSec: target });
         if (loadedKey === keyOf()) engine.seekTo(target);
-        saveProgress();
+        // An explicit seek is the user's choice, even back to the start.
+        expecting = null;
+        saveProgress(true);
       },
 
       seekBy(delta) {

@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { ToastHost } from '@/components/ui/toast-host';
+import { playerLog } from '@/player/event-log';
 import { useBookmarks } from '@/store/bookmarks';
 import { useFeeds } from '@/store/feeds';
 import { useLibrary } from '@/store/library';
@@ -20,6 +21,7 @@ export default function RootLayout() {
     void useLibrary.getState().hydrate();
     void useFeeds.getState().hydrate();
     void useBookmarks.getState().hydrate();
+    void playerLog.hydrate();
     // Settings first: the player restores with the saved playback speed.
     void useSettings.getState().hydrate().then(() => usePlayer.getState().hydrate());
   }, []);

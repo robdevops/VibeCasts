@@ -37,3 +37,16 @@ export function isPlausibleAdvance(args: { fromSec: number; toSec: number; wallS
   const allowed = Math.max(0, wallSec) * Math.max(rate, 1) * 1.2 + 12;
   return toSec - fromSec <= allowed;
 }
+
+/** A position this far behind where we were, landing near the start, is a player that lost its place. */
+export const REWIND_GUARD_SEC = 30;
+const RESET_NEAR_START_SEC = 5;
+
+/**
+ * Did the player fall back to the start by itself? After a long screen-off the native player can
+ * be reset and report 0:00. Our own seeks update the known position first, so an unexplained drop
+ * of this kind is never the user (scrubbing elsewhere in the episode is not affected).
+ */
+export function isLostPlace(args: { knownSec: number; reportedSec: number }): boolean {
+  return args.knownSec - args.reportedSec > REWIND_GUARD_SEC && args.reportedSec <= RESET_NEAR_START_SEC;
+}
