@@ -5,6 +5,9 @@ import { useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { ToastHost } from '@/components/ui/toast-host';
+import { startDownloadAutomation } from '@/downloads/auto';
+import { registerAutoDownloadTask } from '@/downloads/background';
+import { useDownloads } from '@/downloads/download-manager';
 import { prefetchTileArtwork } from '@/lib/prefetch-artwork';
 import { playerLog } from '@/player/event-log';
 import { useBookmarks } from '@/store/bookmarks';
@@ -22,6 +25,7 @@ export default function RootLayout() {
     void useFeeds.getState().hydrate();
     void useBookmarks.getState().hydrate();
     void playerLog.hydrate();
+    void useDownloads.getState().hydrate();
     // Settings first: the player restores with the saved playback speed.
     void useSettings.getState().hydrate().then(() => usePlayer.getState().hydrate());
   }, []);
@@ -31,6 +35,13 @@ export default function RootLayout() {
   const feedsReady = useFeeds((s) => s.hydrated);
   const settingsReady = useSettings((s) => s.hydrated);
   const ready = libraryReady && feedsReady && settingsReady;
+  // Auto archive/download rules, once the saved library is in.
+  useEffect(() => {
+    if (!ready) return;
+    void registerAutoDownloadTask();
+    return startDownloadAutomation();
+  }, [ready]);
+
   useEffect(() => {
     if (ready) void SplashScreen.hideAsync();
     const t = setTimeout(() => void SplashScreen.hideAsync(), 3000);

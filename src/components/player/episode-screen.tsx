@@ -9,6 +9,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Artwork } from '@/components/ui/artwork';
 import { Icon, type IconName } from '@/components/ui/icon';
 import { MenuSheet, type MenuItem } from '@/components/ui/menu-sheet';
+import { downloadsSupported, useDownloads } from '@/downloads/download-manager';
 import { durationLabel, episodeDateLabel } from '@/lib/episode-list';
 import { emptyEpisodeState, episodeKey } from '@/lib/episode-state';
 import { formatClock, formatRate } from '@/lib/player-math';
@@ -79,6 +80,7 @@ export default function EpisodeScreen() {
 
   const key = viewed ? episodeKey(viewed.podcast.id, viewed.episode.id) : '';
   const state = useLibrary((s) => s.episodes[key]) ?? emptyEpisodeState;
+  const downloading = useDownloads((s) => !!s.active[key]);
 
   if (!viewed) {
     return (
@@ -121,7 +123,9 @@ export default function EpisodeScreen() {
   };
 
   const baseItems: MenuItem[] = [
-    { label: 'Download (coming soon)', icon: 'file-download', disabled: true, onPress: () => {} },
+    state.downloadedUri
+      ? { label: 'Remove download', icon: 'delete-outline', onPress: () => useDownloads.getState().remove(podcast.id, episode.id) }
+      : { label: downloading ? 'Downloading…' : 'Download', icon: 'file-download', disabled: !downloadsSupported || downloading, onPress: () => useDownloads.getState().download(episode, podcast) },
     {
       label: 'Transcript',
       icon: 'subject',
