@@ -14,7 +14,7 @@ Don't run the dev server with `CI=1` (it disables reloads, so new routes aren't 
 `expo lint` can't auto-configure here (proxy), so ESLint is configured manually in `eslint.config.js`.
 
 ## Adding a screen
-Each tab is a route group with its own stack (`src/app/(tabs)/(podcasts)`, `(discovery)`, `(playlists)`) so detail pages keep the tab bar. A new tab needs a group folder with `_layout.tsx` (a `Stack`) plus a trigger in both `src/components/app-tabs.tsx` (native) and `app-tabs.web.tsx` (web). Tab roots other than Podcasts need a real segment (`playlists.tsx`, `discovery.tsx`) so URLs don't collide. Link to detail pages with the full group path, e.g. `/(tabs)/(podcasts)/podcast/[id]`.
+Each tab is a route group with its own stack (`src/app/(tabs)/(podcasts)`, `(discovery)`, `(playlists)`) so detail pages keep the tab bar. A new tab needs a group folder with `_layout.tsx` (a `Stack`) plus a `TabTrigger` in `src/components/app-tabs.tsx`. That one custom tab bar serves every platform (instead of native tabs) so the persistent mini player can sit exactly above it. Tab roots other than Podcasts need a real segment (`playlists.tsx`, `discovery.tsx`) so URLs don't collide. Link to detail pages with the full group path, e.g. `/(tabs)/(podcasts)/podcast/[id]`.
 
 ## Local (macOS) emulator
 Node 24 (`.nvmrc`), Xcode (iOS Simulator), Android Studio (AVD). `npx expo start`, then `i` / `a`. Claude Code run locally can screenshot with `xcrun simctl io booted screenshot x.png` or `adb exec-out screencap -p > x.png`.
@@ -24,3 +24,9 @@ Node 24 (`.nvmrc`), Xcode (iOS Simulator), Android Studio (AVD). `npx expo start
 - Use `sharedValue.set()`/`.get()` for writes (the React Compiler lint rule rejects `.value =`).
 - Artwork is wrapped in `pointerEvents="none"`: on web an `<img>` starts a native drag and cancels gestures.
 - In SDK 57 native tabs are imported from `expo-router/unstable-native-tabs`.
+
+## Audio, lock screen and background playback
+- `src/store/player.ts` is the single player (current episode, position, rate, sleep timer; saves progress to the library and restores the last episode after a restart). It talks to audio only through the `PlayerEngine` interface in `src/player/engine.ts` (`expo-audio`); tests use `src/player/fake-engine.ts`.
+- Background audio and lock-screen/notification/Bluetooth controls come from `expo-audio`: `setAudioModeAsync({ shouldPlayInBackground: true, interruptionMode: 'doNotMix' })` plus `setActiveForLockScreen(...)`, and the `expo-audio` config plugin in `app.json` (iOS `UIBackgroundModes: audio`; Android media foreground service). The lock-screen skip buttons are a fixed 10 s set by the OS.
+- Android in **Expo Go** can't show lock-screen controls (its manifest has no media service), so `engine.ts` skips them there. Use a development build for the real thing: `npx eas-cli@latest build --profile development --platform android` (or `ios`), install it, then `npm run dev-client`.
+- `ios.bundleIdentifier` / `android.package` are `org.robstevens.mobiletest`: change them before the first store release.

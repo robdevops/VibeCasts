@@ -31,11 +31,12 @@ import { useTheme } from '@/hooks/use-theme';
 import { episodeCounts, visibleEpisodes, type EpisodeSort } from '@/lib/episode-list';
 import { episodeKey } from '@/lib/episode-state';
 import { capabilitiesFor } from '@/lib/podcast-capabilities';
-import { playEpisode } from '@/player';
+import { toggleEpisode } from '@/player';
 import { useFeeds } from '@/store/feeds';
 import { useLibrary } from '@/store/library';
 import { useToast } from '@/store/toast';
 
+import { BookmarkList } from './bookmark-list';
 import { EpisodeRow } from './episode-row';
 import { SettingsSheet } from './settings-sheet';
 
@@ -76,7 +77,6 @@ export default function PodcastScreen() {
   const [sort, setSort] = useState<EpisodeSort>('newest');
   const [tab, setTab] = useState<'episodes' | 'bookmarks'>('episodes');
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [menu, setMenu] = useState<Menu>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -104,12 +104,12 @@ export default function PodcastScreen() {
   };
   const onPress = (e: Episode) => {
     if (selected.size > 0) toggleSelected(e);
-    else setExpandedId((cur) => (cur === e.id ? null : e.id));
+    else router.push({ pathname: '/episode', params: { podcastId: id, episodeId: e.id } });
   };
   const onLongPress = (e: Episode) => setSelected((prev) => (prev.size ? prev : new Set([e.id])));
   const onPlay = (e: Episode) => {
     if (selected.size > 0) toggleSelected(e);
-    else if (podcast) playEpisode(e, podcast);
+    else if (podcast) toggleEpisode(e, podcast);
   };
 
   /** Apply `field` to all selected episodes: set it, or clear it if every one already has it. */
@@ -361,7 +361,7 @@ export default function PodcastScreen() {
       <FlatList
         data={tab === 'episodes' ? shown : []}
         keyExtractor={(e) => e.id}
-        extraData={`${selected.size}|${[...selected].join(',')}|${expandedId}`}
+        extraData={`${selected.size}|${[...selected].join(',')}`}
         ListHeaderComponent={header}
         keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={false} onRefresh={refresh} tintColor={theme.accent} />}
@@ -374,7 +374,6 @@ export default function PodcastScreen() {
             state={stateOf(item)}
             selecting={selecting}
             selected={selected.has(item.id)}
-            expanded={expandedId === item.id}
             onPress={onPress}
             onLongPress={onLongPress}
             onPlay={onPlay}
@@ -382,9 +381,7 @@ export default function PodcastScreen() {
         )}
         ListEmptyComponent={
           tab === 'bookmarks' ? (
-            <ThemedText themeColor="textSecondary" style={styles.empty}>
-              Bookmarks you add while listening will show up here.
-            </ThemedText>
+            <BookmarkList podcastId={id} emptyText="Bookmarks you add while listening will show up here." />
           ) : loadingFeed && !episodes.length ? (
             <ActivityIndicator color={theme.accent} style={styles.empty} />
           ) : (

@@ -1,10 +1,21 @@
 import type { Episode, Podcast } from '@/api/types';
-import { useToast } from '@/store/toast';
+import { usePlayer } from '@/store/player';
 
-/**
- * Playback entry point. Phase 4 replaces this with the real `expo-audio` player; until then the
- * play buttons exist but only tell the user playback is coming.
- */
-export function playEpisode(_episode: Episode, _podcast: Podcast): void {
-  useToast.getState().show('Playback arrives in the next phase');
+/** Start (or resume) an episode. If it's the one already loaded, this just resumes playback. */
+export function playEpisode(episode: Episode, podcast: Podcast): void {
+  usePlayer.getState().play(episode, podcast);
+}
+
+/** Start an episode at a given position, e.g. from a bookmark. */
+export function playEpisodeAt(episode: Episode, podcast: Podcast, positionSec: number): void {
+  usePlayer.getState().play(episode, podcast);
+  usePlayer.getState().seekTo(positionSec);
+}
+
+/** The play button on an episode row: pauses if that episode is playing, otherwise plays it. */
+export function toggleEpisode(episode: Episode, podcast: Podcast): void {
+  const { current, playing } = usePlayer.getState();
+  const isCurrent = current?.episode.id === episode.id && current.podcast.id === podcast.id;
+  if (isCurrent && playing) usePlayer.getState().pause();
+  else usePlayer.getState().play(episode, podcast);
 }

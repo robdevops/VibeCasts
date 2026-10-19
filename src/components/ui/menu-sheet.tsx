@@ -17,10 +17,10 @@ export type MenuItem = {
   separator?: boolean;
 };
 
-type Props = { visible: boolean; items: MenuItem[]; onClose: () => void; title?: string };
+type Props = { visible: boolean; items: MenuItem[]; onClose: () => void; title?: string; anchor?: 'top' | 'bottom'; dark?: boolean };
 
-/** Popover menu anchored under the top-right of the screen. */
-export function MenuSheet({ visible, items, onClose, title }: Props) {
+/** Popover menu anchored to the top-right (default) or bottom-right of the screen. */
+export function MenuSheet({ visible, items, onClose, title, anchor = 'top', dark }: Props) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   return (
@@ -29,7 +29,8 @@ export function MenuSheet({ visible, items, onClose, title }: Props) {
       <View
         style={[
           styles.card,
-          { top: insets.top + 52, backgroundColor: theme.background, borderColor: theme.border },
+          anchor === 'top' ? { top: insets.top + 52 } : { bottom: insets.bottom + 84 },
+          { backgroundColor: dark ? '#2B1111' : theme.background, borderColor: dark ? 'rgba(255,255,255,0.15)' : theme.border },
         ]}>
         {title ? (
           <ThemedText type="smallBold" themeColor="textSecondary" style={styles.title}>
@@ -53,7 +54,7 @@ export function MenuSheet({ visible, items, onClose, title }: Props) {
                   <Icon name={item.icon} size={22} color={item.destructive ? theme.accent : theme.textSecondary} />
                 ) : null}
               </View>
-              <ThemedText style={{ flex: 1, color: item.destructive ? theme.accent : theme.text }}>{item.label}</ThemedText>
+              <ThemedText style={{ flex: 1, color: item.destructive ? theme.accent : dark ? '#fff' : theme.text }}>{item.label}</ThemedText>
               {item.checked ? <Icon name="check" size={20} color={theme.accent} /> : null}
             </Pressable>
           </View>

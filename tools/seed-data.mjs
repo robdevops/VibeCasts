@@ -58,5 +58,16 @@ export function seed({ unplayed = [99, 12, 3, 40, 7, 0, 20, 5, 1, 60] } = {}) {
     layout: 'tiles',
     sort: 'custom',
   };
-  return { 'library.v1': JSON.stringify(library), 'feeds.v1': JSON.stringify({ feeds, known: { 200: preview } }) };
+  const nowPlaying = {
+    podcast: subscriptions['100'].podcast,
+    episode: feeds['100'].episodes[0],
+    positionSec: 90,
+  };
+  const bookmarks = [{ id: 'b1', podcastId: '100', episodeId: 'e0', timeSec: 312, createdAt: 2 }, { id: 'b2', podcastId: '100', episodeId: 'e0', timeSec: 845, createdAt: 3 }];
+  return {
+    'library.v1': JSON.stringify(library),
+    'feeds.v1': JSON.stringify({ feeds, known: { 200: preview } }),
+    'player.v1': JSON.stringify(nowPlaying),
+    'bookmarks.v1': JSON.stringify(bookmarks),
+  };
 }

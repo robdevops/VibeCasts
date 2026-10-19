@@ -13,12 +13,15 @@ const CIRC = 2 * Math.PI * R;
 export function PlayRing({
   progress,
   played,
+  playing = false,
   onPress,
   label,
 }: {
   /** 0..1 */
   progress: number;
   played: boolean;
+  /** Show a pause glyph (this episode is playing right now). */
+  playing?: boolean;
   onPress: () => void;
   label: string;
 }) {
@@ -33,7 +36,7 @@ export function PlayRing({
       hitSlop={8}
       style={({ pressed }) => [styles.wrap, { opacity: pressed ? 0.6 : 1 }]}>
       <Svg width={SIZE} height={SIZE} style={[StyleSheet.absoluteFill, { transform: [{ rotate: '-90deg' }] }]}>
-        {played ? (
+        {played && !playing ? (
           <Circle cx={SIZE / 2} cy={SIZE / 2} r={SIZE / 2} fill={theme.success} />
         ) : (
           <>
@@ -54,7 +57,7 @@ export function PlayRing({
         )}
       </Svg>
       <View>
-        <Icon name={played ? 'check' : 'play-arrow'} size={26} color={played ? '#fff' : color} />
+        <Icon name={playing ? 'pause' : played ? 'check' : 'play-arrow'} size={26} color={played && !playing ? '#fff' : color} />
       </View>
     </Pressable>
   );

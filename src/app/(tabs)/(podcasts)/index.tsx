@@ -72,7 +72,7 @@ export default function PodcastsScreen() {
     setMenu(null);
   };
 
-  const go = (path: '/downloads' | '/starred' | '/bookmarks' | '/history') => {
+  const go = (path: '/downloads' | '/starred' | '/bookmarks' | '/history' | '/settings') => {
     setMenu(null);
     router.push(path);
   };
@@ -99,6 +99,7 @@ export default function PodcastsScreen() {
     { label: 'Starred', icon: 'star-border', onPress: () => go('/starred') },
     { label: 'Bookmarks', icon: 'bookmark-border', onPress: () => go('/bookmarks') },
     { label: 'Listening history', icon: 'history', onPress: () => go('/history') },
+    { label: 'Settings', icon: 'settings', separator: true, onPress: () => go('/settings') },
   ];
 
   const sortItems: MenuItem[] = (Object.keys(SORT_LABELS) as PodcastSort[]).map((s) => ({
