@@ -1,6 +1,7 @@
 import type { Episode, Podcast } from '@/api/types';
 import { createMemoryKV } from '@/db/storage';
 import { createFakeEpisodeCache } from '@/downloads/episode-cache';
+import { createEventLog } from '@/player/event-log';
 import { createFakeEngine } from '@/player/fake-engine';
 
 import { createLibraryStore, episodeKey } from './library';
@@ -47,6 +48,7 @@ function setup(opts: { now?: () => number; active?: boolean; beforeStream?: (e: 
   const settings = createSettingsStore(createMemoryKV());
   library.getState().subscribe(podcast);
   const fakeCache = createFakeEpisodeCache();
+  const log = createEventLog(createMemoryKV(), () => 1_000_000);
   // A controllable clock. `emit` advances it by the played distance, like real playback does;
   // `jump` reports a position without any time passing (what a runaway player looks like).
   let clockMs = 1_000_000;
@@ -68,8 +70,9 @@ function setup(opts: { now?: () => number; active?: boolean; beforeStream?: (e: 
     appState: app.appState,
     beforeStream: opts.beforeStream,
     cache: opts.cache ? fakeCache.cache : undefined,
+    log,
   });
-  return { ...fake, emit, jump, advance: (ms: number) => (clockMs += ms), storage, library, settings, player, setActive: app.set, fakeCache };
+  return { ...fake, log, emit, jump, advance: (ms: number) => (clockMs += ms), storage, library, settings, player, setActive: app.set, fakeCache };
 }
 
 it('plays an episode, loading it with lock-screen metadata inputs and the saved rate', () => {
@@ -548,7 +551,7 @@ describe('runaway playback (position jumps ahead of the clock)', () => {
     t.jump({ positionSec: 1500, playing: true }); // silent run-through, no time passed
     expect(t.player.getState().playing).toBe(false);
     expect(t.player.getState().positionSec).toBe(7);
-    expect(t.calls).toEqual(['pause', 'seek 7']);
+    expect(t.calls).toEqual(['load https://a.mp3 @7 x1', 'pause']); // reloaded at the good spot, paused
     expect(t.library.getState().episodes[key]).toMatchObject({ progressMs: 7000, played: false });
     expect(useToast.getState().message).toMatch(/kept your place/);
   });
@@ -605,5 +608,83 @@ describe('runaway playback (position jumps ahead of the clock)', () => {
     t.emit({ positionSec: 900, playing: true });
     expect(t.player.getState().playing).toBe(true);
     expect(t.player.getState().positionSec).toBe(900);
+  });
+});
+
+describe('keeping your place after the player is reset (overnight)', () => {
+  /** Play to `pos`, then lock the screen. */
+  function listenTo(pos: number) {
+    const t = setup();
+    t.player.getState().play(episode, podcast);
+    t.emit({ positionSec: pos - 1, playing: true });
+    t.emit({ positionSec: pos, playing: true });
+    t.player.getState().pause();
+    t.calls.length = 0;
+    return t;
+  }
+
+  it('a reset to 0:00 does not replace the place, in the UI or in the saved progress', () => {
+    const t = listenTo(1350);
+    t.reset();
+    expect(t.player.getState().positionSec).toBe(1350);
+    expect(t.library.getState().episodes[key].progressMs).toBe(1_350_000);
+    expect(t.calls).toContain('load https://a.mp3 @1350 x1'); // reloaded at the place, not seeked
+    expect(useToast.getState().message).toMatch(/kept your place/);
+  });
+
+  it('keeps the place even when the reset player then keeps reporting 0:00', () => {
+    const t = listenTo(1350);
+    t.state.lazyLoad = true;
+    t.reset();
+    t.advance(20_000);
+    t.jump({ positionSec: 0, playing: false }); // reload still at 0 after the grace period: retry once
+    t.advance(20_000);
+    t.jump({ positionSec: 0, playing: false }); // still nothing: give up, stay paused
+    expect(t.player.getState().playing).toBe(false);
+    expect(t.player.getState().positionSec).toBe(1350);
+    expect(t.library.getState().episodes[key].progressMs).toBe(1_350_000);
+    // The next press of play loads afresh at the saved place.
+    t.calls.length = 0;
+    t.player.getState().toggle();
+    expect(t.calls[0]).toMatch(/^load .* @1350/);
+  });
+
+  it('a normal reload after the reset resumes at the place and plays on', () => {
+    const t = listenTo(1350);
+    t.state.lazyLoad = true;
+    t.reset();
+    t.jump({ positionSec: 0, playing: false, loaded: true }); // before the start seek applies
+    expect(t.player.getState().positionSec).toBe(1350);
+    t.applyStart(); // seek applied
+    t.player.getState().toggle();
+    t.emit({ positionSec: 1351, playing: true });
+    expect(t.player.getState().playing).toBe(true);
+    expect(t.player.getState().positionSec).toBeGreaterThan(1340);
+  });
+
+  it('a user seek back to the start still works', () => {
+    const t = listenTo(1350);
+    t.player.getState().seekTo(0);
+    expect(t.player.getState().positionSec).toBe(0);
+    expect(t.library.getState().episodes[key].progressMs ?? 0).toBe(0);
+  });
+
+  it('pressing play on a player that never answers loads the episode again at the place', () => {
+    jest.useFakeTimers();
+    try {
+      const t = listenTo(1350);
+      t.player.getState().toggle(); // resume: the fake keeps quiet only if we stop it from replying
+      jest.advanceTimersByTime(4000);
+      // The fake replied to play(), so no reload is needed.
+      expect(t.calls.some((c) => c.startsWith('load'))).toBe(false);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('records what happened in the log', () => {
+    const t = listenTo(1350);
+    t.reset();
+    expect(t.log.text()).toMatch(/lost-place good=1350/);
   });
 });

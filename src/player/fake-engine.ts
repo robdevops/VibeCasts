@@ -4,7 +4,7 @@ import type { EngineStatus, NowPlayingMeta, PlayerEngine } from './engine';
 export function createFakeEngine() {
   const listeners = new Set<(s: EngineStatus) => void>();
   const calls: string[] = [];
-  const state = { uri: '', position: 0, duration: 1800, rate: 1, playing: false, meta: null as NowPlayingMeta | null };
+  const state = { lazyLoad: false, pendingStart: 0, uri: '', position: 0, duration: 1800, rate: 1, playing: false, meta: null as NowPlayingMeta | null };
 
   const status = (over: Partial<EngineStatus> = {}): EngineStatus => ({
     positionSec: state.position,
@@ -26,7 +26,8 @@ export function createFakeEngine() {
   const engine: PlayerEngine = {
     load(uri, startSec, rate, meta) {
       calls.push(`load ${uri} @${startSec} x${rate}`);
-      Object.assign(state, { uri, position: startSec, rate, meta, playing: false });
+      // A real player reports 0:00 until the start seek applies; `lazyLoad` models that (see `applyStart`).
+      Object.assign(state, { uri, position: state.lazyLoad ? 0 : startSec, pendingStart: startSec, rate, meta, playing: false });
     },
     play() {
       calls.push('play');
@@ -52,5 +53,12 @@ export function createFakeEngine() {
       return () => listeners.delete(l);
     },
   };
-  return { engine, calls, state, emit, fail: () => emit({ error: true, playing: false, loaded: false }) };
+  // What a reset player looks like after a long screen-off: back at 0:00, not playing.
+  const reset = () => {
+    state.position = 0;
+    state.playing = false;
+    emit({ positionSec: 0, playing: false });
+  };
+  const applyStart = () => emit({ positionSec: state.pendingStart });
+  return { engine, calls, state, emit, reset, applyStart, fail: () => emit({ error: true, playing: false, loaded: false }) };
 }

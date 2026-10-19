@@ -1,4 +1,4 @@
-import { Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { Platform, Pressable, ScrollView, Share, StyleSheet, Switch, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -6,11 +6,21 @@ import { LibrarySection } from '@/components/settings/library-section';
 import { Icon } from '@/components/ui/icon';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { useTheme } from '@/hooks/use-theme';
+import { playerLog } from '@/player/event-log';
 import { useSettings } from '@/store/settings';
 
 const STEPS = [5, 10, 15, 20, 30, 45, 60, 90];
 
 type BoolKey = 'deleteOnFinish' | 'intelligentResume' | 'warnMobileData' | 'autoRestartSleepTimer' | 'cacheWholeEpisodes';
+
+async function sharePlaybackLog() {
+  const text = playerLog.text() || 'No playback events recorded yet.';
+  if (Platform.OS === 'web') {
+    await navigator.clipboard?.writeText(text).catch(() => {});
+    return;
+  }
+  await Share.share({ message: text }).catch(() => {});
+}
 
 export default function SettingsScreen() {
   const theme = useTheme();
@@ -65,6 +75,21 @@ export default function SettingsScreen() {
           The lock-screen and headset buttons use a fixed 10 second skip set by the operating system.
         </ThemedText>
         <LibrarySection />
+        <ThemedText type="smallBold" themeColor="textSecondary" style={styles.section}>
+          TROUBLESHOOTING
+        </ThemedText>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Share playback log"
+          onPress={() => void sharePlaybackLog()}
+          style={[styles.row, { borderBottomColor: theme.border }]}>
+          <View style={{ flex: 1, gap: 2 }}>
+            <ThemedText>Share playback log</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              A short record of what the player did, to help find out why playback stopped. It holds no listening history.
+            </ThemedText>
+          </View>
+        </Pressable>
       </ScrollView>
     </ThemedView>
   );
