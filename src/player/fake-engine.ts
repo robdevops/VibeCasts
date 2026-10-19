@@ -15,7 +15,13 @@ export function createFakeEngine() {
     finished: false,
     ...over,
   });
-  const emit = (over?: Partial<EngineStatus>) => listeners.forEach((l) => l(status(over)));
+  const emit = (over?: Partial<EngineStatus>) => {
+    // Like a real player, remember what was last reported so later events agree with it.
+    if (over?.positionSec !== undefined) state.position = over.positionSec;
+    if (over?.durationSec !== undefined) state.duration = over.durationSec;
+    if (over?.playing !== undefined) state.playing = over.playing;
+    listeners.forEach((l) => l(status(over)));
+  };
 
   const engine: PlayerEngine = {
     load(uri, startSec, rate, meta) {

@@ -6,7 +6,10 @@ import { kv } from '@/db/kv';
 import type { KV } from '@/db/storage';
 import { emptyEpisodeState, episodeKey, isFinished } from '@/lib/episode-state';
 import { clampSeek, reachedSkipLast, startPosition } from '@/lib/player-math';
+import { resumeFrom, shouldRestartSleep } from '@/lib/playback-rules';
+import { createFileEpisodeCache, type EpisodeCache } from '@/downloads/episode-cache';
 import { createExpoEngine, type EngineStatus, type PlayerEngine } from '@/player/engine';
+import { confirmStreaming } from '@/player/stream-guard';
 
 import { useLibrary } from './library';
 import { useSettings } from './settings';
@@ -47,6 +50,10 @@ type Deps = {
   now: () => number;
   /** Foreground/background signal. Faked in tests. */
   appState: { isActive(): boolean; subscribe(onChange: (active: boolean) => void): () => void };
+  /** Called before streaming starts (e.g. the mobile-data prompt). Resolve false to cancel. */
+  beforeStream: (episode: Episode) => Promise<boolean>;
+  /** Temporary whole-episode cache ("cache whole episodes"). Absent where unsupported (web). */
+  cache: EpisodeCache;
 };
 
 const STORAGE_KEY = 'player.v1';
@@ -59,6 +66,7 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
   const library = deps.library ?? useLibrary;
   const settings = deps.settings ?? useSettings;
   const now = deps.now ?? Date.now;
+  const cache = deps.cache;
   const appState =
     deps.appState ??
     ({
@@ -75,6 +83,13 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
   // foreground, so a screen-off listen doesn't re-render the UI (and wake JS) for nothing.
   let livePosition = 0;
   let liveDuration = 0;
+  // For "auto restart sleep timer": the last minutes-based timer chosen, and when playback last paused.
+  let lastSleepMinutes: number | null = null;
+  let lastPauseAt: number | null = null;
+  // Bumped by each play request so a slow mobile-data prompt can't start an outdated episode.
+  let playRequest = 0;
+  // Where a load that failed before playing began, so a retry doesn't back up (resume) again.
+  let failedStart: number | null = null;
   let sleepTimer: ReturnType<typeof setTimeout> | undefined;
 
   const store = create<PlayerData & Actions>()((set, get) => {
@@ -107,6 +122,36 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
       persist();
     };
 
+    const metaOf = (c: { podcast: Podcast; episode: Episode }) => ({
+      title: c.episode.title,
+      artist: c.podcast.title,
+      artworkUrl: c.episode.artwork ?? c.podcast.artwork,
+    });
+
+    const maybeRestartSleep = () => {
+      if (
+        lastSleepMinutes !== null &&
+        shouldRestartSleep({ enabled: settings.getState().autoRestartSleepTimer, minutes: lastSleepMinutes, lastPauseAt, now: now() })
+      ) {
+        get().setSleep({ minutes: lastSleepMinutes });
+      }
+    };
+
+    const startPlayback = () => {
+      maybeRestartSleep();
+      engine.play();
+    };
+
+    /** Resume the loaded (paused) episode, a couple of seconds early if intelligent resume is on. */
+    const resumeLoaded = () => {
+      if (settings.getState().intelligentResume && livePosition > 0) {
+        livePosition = resumeFrom(livePosition, true);
+        engine.seekTo(livePosition);
+        if (appState.isActive()) set({ positionSec: livePosition });
+      }
+      startPlayback();
+    };
+
     const clearSleepTimer = () => {
       if (sleepTimer) clearTimeout(sleepTimer);
       sleepTimer = undefined;
@@ -115,6 +160,7 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
     const stopForSleep = () => {
       // Clear the timer first: pausing emits a status update that would re-run checkSleep.
       clearSleepTimer();
+      lastPauseAt = now();
       set({ sleep: null, playing: false });
       saveProgress();
       engine.pause();
@@ -127,6 +173,8 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
       // Unload first so the status update from pausing is ignored rather than re-saved.
       loadedKey = null;
       clearSleepTimer();
+      lastPauseAt = now();
+      cache?.release(key); // finished: the temporary file is no longer needed
       library.getState().patchEpisode(key, { played: true, progressMs: 0, lastPlayed: now() });
       // Leave the episode selected but rewound, so pressing play again starts it over.
       livePosition = 0;
@@ -145,6 +193,7 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
       if (s.error) {
         // Keep the episode selected (and the saved position) so retrying resumes in place.
         loadedKey = null;
+        failedStart = livePosition;
         set({ playing: false, buffering: false });
         useToast.getState().show("Couldn't play this episode. Check your connection and try again.");
         return;
@@ -174,6 +223,7 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
         finish();
         return;
       }
+      if (prevPlaying && !s.playing) lastPauseAt = now();
       checkSleep();
       if ((prevPlaying && !s.playing) || (s.playing && Math.abs(s.positionSec - lastSavedSec) >= SAVE_EVERY_SEC)) {
         saveProgress();
@@ -189,12 +239,9 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
       const key = episodeKey(podcast.id, episode.id);
       const downloaded = library.getState().episodes[key]?.downloadedUri;
       const rate = settings.getState().playbackRate;
-      engine.load(downloaded ?? episode.audioUrl, startSec, rate, {
-        title: episode.title,
-        artist: podcast.title,
-        artworkUrl: episode.artwork ?? podcast.artwork,
-      });
+      engine.load(downloaded ?? cache?.uriFor(key) ?? episode.audioUrl, startSec, rate, metaOf({ podcast, episode }));
       loadedKey = key;
+      failedStart = null;
       lastSavedSec = startSec;
       livePosition = startSec;
       liveDuration = episode.durationSec;
@@ -204,6 +251,46 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
         durationSec: episode.durationSec,
         rate,
         buffering: true,
+      });
+    };
+
+    /** Swap a streaming episode to its freshly cached file at the current position. */
+    const swapToFile = (key: string, uri: string) => {
+      const c = get().current;
+      if (!c || loadedKey !== key || keyOf() !== key) return;
+      const wasPlaying = get().playing;
+      engine.load(uri, livePosition, get().rate, metaOf(c));
+      if (wasPlaying) engine.play();
+    };
+
+    const maybeCacheWhole = (episode: Episode, podcast: Podcast) => {
+      const key = episodeKey(podcast.id, episode.id);
+      if (!cache || !settings.getState().cacheWholeEpisodes) return;
+      if (library.getState().episodes[key]?.downloadedUri || cache.uriFor(key)) return;
+      cache.start(key, episode.audioUrl, (uri) => swapToFile(key, uri));
+    };
+
+    const beginPlayback = (episode: Episode, podcast: Podcast, startSec: number) => {
+      const previous = keyOf();
+      const key = episodeKey(podcast.id, episode.id);
+      if (previous && previous !== key) cache?.release(previous);
+      load(episode, podcast, startSec);
+      startPlayback();
+      persist();
+      maybeCacheWhole(episode, podcast);
+    };
+
+    /** Run `go` now, or after the user OKs streaming over mobile data. */
+    const whenStreamingAllowed = (episode: Episode, podcast: Podcast, go: () => void) => {
+      const key = episodeKey(podcast.id, episode.id);
+      const streaming = !library.getState().episodes[key]?.downloadedUri && !cache?.uriFor(key);
+      if (!streaming || !deps.beforeStream) {
+        go();
+        return;
+      }
+      const request = ++playRequest;
+      void deps.beforeStream(episode).then((ok) => {
+        if (ok && request === playRequest) go();
       });
     };
 
@@ -234,46 +321,50 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
         } catch {
           // Nothing to restore.
         }
+        cache?.clear(); // the in-memory index is gone after a restart, so stale files go too
         set({ hydrated: true, rate: settings.getState().playbackRate });
       },
 
       play(episode, podcast) {
         const key = episodeKey(podcast.id, episode.id);
         if (loadedKey === key && keyOf() === key) {
-          engine.play();
+          if (!get().playing) resumeLoaded();
           return;
         }
         if (get().playing) saveProgress();
         const state = library.getState().episodes[key] ?? emptyEpisodeState;
         const overrides = library.getState().subscriptions[podcast.id]?.overrides;
-        // A finished episode replays from the top.
-        const start = state.played ? (overrides?.skipFirstSec ?? 0) : startPosition(state.progressMs, overrides?.skipFirstSec ?? 0, episode.durationSec);
-        load(episode, podcast, start);
-        engine.play();
-        persist();
+        // A finished episode replays from the top; otherwise pick up (a little early) where you were.
+        const resuming = !state.played && state.progressMs > 0;
+        const base = state.played ? (overrides?.skipFirstSec ?? 0) : startPosition(state.progressMs, overrides?.skipFirstSec ?? 0, episode.durationSec);
+        const start = resuming ? resumeFrom(base, settings.getState().intelligentResume) : base;
+        whenStreamingAllowed(episode, podcast, () => beginPlayback(episode, podcast, start));
       },
 
       toggle() {
         const { current, playing } = get();
         if (!current) return;
         if (playing) {
-          engine.pause();
+          get().pause();
           return;
         }
         if (loadedKey === keyOf()) {
-          engine.play();
-        } else {
-          // Restored from storage (or finished): load now, resuming from where it stopped.
-          const key = episodeKey(current.podcast.id, current.episode.id);
-          const state = library.getState().episodes[key] ?? emptyEpisodeState;
-          const start = livePosition > 0 ? livePosition : startPosition(state.progressMs, 0, current.episode.durationSec);
-          load(current.episode, current.podcast, start);
-          engine.play();
+          resumeLoaded();
+          return;
         }
+        // Restored from storage (or finished): load now, resuming from where it stopped.
+        const key = episodeKey(current.podcast.id, current.episode.id);
+        const state = library.getState().episodes[key] ?? emptyEpisodeState;
+        const from = livePosition > 0 ? livePosition : startPosition(state.progressMs, 0, current.episode.durationSec);
+        // A retry after a failed load reuses that load's start instead of backing up again.
+        const start = failedStart ?? resumeFrom(from, settings.getState().intelligentResume);
+        whenStreamingAllowed(current.episode, current.podcast, () => beginPlayback(current.episode, current.podcast, start));
       },
 
       pause() {
-        if (get().playing) engine.pause();
+        if (!get().playing) return;
+        lastPauseAt = now();
+        engine.pause();
       },
 
       seekTo(sec) {
@@ -304,6 +395,8 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
 
       setSleep(opt) {
         clearSleepTimer();
+        // Remember the length for "auto restart"; turning the timer off (or to end of episode) forgets it.
+        lastSleepMinutes = opt !== null && opt !== 'episode' ? opt.minutes : null;
         if (opt === null) {
           set({ sleep: null });
         } else if (opt === 'episode') {
@@ -321,4 +414,9 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
   return store;
 }
 
-export const usePlayer = createPlayerStore();
+export const usePlayer = createPlayerStore({
+  // Ask before streaming over mobile data (the setting lives in useSettings).
+  beforeStream: () =>
+    confirmStreaming(useSettings.getState().warnMobileData, () => useSettings.getState().set({ warnMobileData: false })),
+  cache: createFileEpisodeCache(),
+});

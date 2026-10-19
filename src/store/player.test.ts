@@ -1,5 +1,6 @@
 import type { Episode, Podcast } from '@/api/types';
 import { createMemoryKV } from '@/db/storage';
+import { createFakeEpisodeCache } from '@/downloads/episode-cache';
 import { createFakeEngine } from '@/player/fake-engine';
 
 import { createLibraryStore, episodeKey } from './library';
@@ -8,6 +9,8 @@ import { createSettingsStore } from './settings';
 import { useToast } from './toast';
 
 jest.mock('@/db/kv', () => ({ kv: {} }));
+jest.mock('expo-network', () => ({ getNetworkStateAsync: jest.fn(), NetworkStateType: { CELLULAR: 'CELLULAR' } }));
+jest.mock('expo-file-system', () => ({ Directory: class {}, File: class {}, Paths: { cache: '' } }));
 // The module-level singleton builds a real engine on import; give it a no-op one.
 jest.mock('@/player/engine', () => ({
   createExpoEngine: () => ({ load() {}, play() {}, pause() {}, seekTo() {}, setRate() {}, subscribe: () => () => {} }),
@@ -36,15 +39,25 @@ function createFakeAppState(initiallyActive = true) {
   };
 }
 
-function setup(opts: { now?: () => number; active?: boolean } = {}) {
+function setup(opts: { now?: () => number; active?: boolean; beforeStream?: (e: Episode) => Promise<boolean>; cache?: boolean } = {}) {
   const fake = createFakeEngine();
   const app = createFakeAppState(opts.active ?? true);
   const storage = createMemoryKV();
   const library = createLibraryStore(createMemoryKV());
   const settings = createSettingsStore(createMemoryKV());
   library.getState().subscribe(podcast);
-  const player = createPlayerStore({ engine: fake.engine, storage, library, settings, now: opts.now, appState: app.appState });
-  return { ...fake, storage, library, settings, player, setActive: app.set };
+  const fakeCache = createFakeEpisodeCache();
+  const player = createPlayerStore({
+    engine: fake.engine,
+    storage,
+    library,
+    settings,
+    now: opts.now,
+    appState: app.appState,
+    beforeStream: opts.beforeStream,
+    cache: opts.cache ? fakeCache.cache : undefined,
+  });
+  return { ...fake, storage, library, settings, player, setActive: app.set, fakeCache };
 }
 
 it('plays an episode, loading it with lock-screen metadata inputs and the saved rate', () => {
@@ -66,7 +79,8 @@ it('resumes from saved progress, honouring skip-first only on a fresh start', ()
   const t2 = setup();
   t2.library.getState().patchEpisode(key, { progressMs: 90_000 });
   t2.player.getState().play(episode, podcast);
-  expect(t2.calls[0]).toBe('load https://a.mp3 @90 x1');
+  // Intelligent resume (on by default) picks up two seconds early.
+  expect(t2.calls[0]).toBe('load https://a.mp3 @88 x1');
 });
 
 it('prefers the downloaded file over streaming', () => {
@@ -171,7 +185,7 @@ it('persists the current episode and restores it paused after a restart', async 
   expect(t2.player.getState().playing).toBe(false);
   expect(t2.calls).toEqual([]); // nothing loaded until play
   t2.player.getState().toggle();
-  expect(t2.calls).toEqual(['load https://a.mp3 @120 x1', 'play']);
+  expect(t2.calls).toEqual(['load https://a.mp3 @118 x1', 'play']);
 });
 
 it('changing speed updates the engine and the saved setting', () => {
@@ -192,7 +206,7 @@ it('reports a failed load, stays paused and keeps the saved spot so retry resume
   expect(t.player.getState().current?.episode.id).toBe('e');
   expect(useToast.getState().message).toMatch(/Couldn't play/);
   t.player.getState().toggle(); // retry reloads from where it was
-  expect(t.calls.filter((c) => c.startsWith('load'))).toEqual(['load https://a.mp3 @60 x1', 'load https://a.mp3 @60 x1']);
+  expect(t.calls.filter((c) => c.startsWith('load'))).toEqual(['load https://a.mp3 @58 x1', 'load https://a.mp3 @58 x1']);
 });
 
 describe('in the background', () => {
@@ -270,5 +284,241 @@ describe('in the background', () => {
     t.setActive(true);
     t.player.getState().skipForward();
     expect(t.player.getState().positionSec).toBe(130);
+  });
+});
+
+describe('intelligent resume', () => {
+  it('starts a saved episode two seconds early', () => {
+    const t = setup();
+    t.library.getState().patchEpisode(key, { progressMs: 90_000 });
+    t.player.getState().play(episode, podcast);
+    expect(t.calls[0]).toBe('load https://a.mp3 @88 x1');
+  });
+
+  it('does not back up a fresh start (only a real resume)', () => {
+    const t = setup();
+    t.library.getState().setOverride('p', { skipFirstSec: 20 });
+    t.player.getState().play(episode, podcast);
+    expect(t.calls[0]).toBe('load https://a.mp3 @20 x1');
+  });
+
+  it('seeks back two seconds when resuming from a pause', () => {
+    const t = setup();
+    t.player.getState().play(episode, podcast);
+    t.emit({ positionSec: 100, playing: true });
+    t.player.getState().toggle(); // pause
+    t.calls.length = 0;
+    t.player.getState().toggle(); // resume
+    expect(t.calls).toEqual(['seek 98', 'play']);
+  });
+
+  it('does nothing when switched off', () => {
+    const t = setup();
+    t.settings.getState().set({ intelligentResume: false });
+    t.library.getState().patchEpisode(key, { progressMs: 90_000 });
+    t.player.getState().play(episode, podcast);
+    expect(t.calls[0]).toBe('load https://a.mp3 @90 x1');
+    t.emit({ positionSec: 100, playing: true });
+    t.player.getState().toggle();
+    t.calls.length = 0;
+    t.player.getState().toggle();
+    expect(t.calls).toEqual(['play']);
+  });
+
+  it('does not seek skips: skipping is exact', () => {
+    const t = setup();
+    t.player.getState().play(episode, podcast);
+    t.emit({ positionSec: 100, playing: true });
+    t.player.getState().skipForward();
+    expect(t.player.getState().positionSec).toBe(130);
+  });
+});
+
+describe('warn when using mobile data', () => {
+  it('waits for the answer, then plays', async () => {
+    let answer!: (ok: boolean) => void;
+    const t = setup({ beforeStream: () => new Promise<boolean>((r) => (answer = r)) });
+    t.player.getState().play(episode, podcast);
+    expect(t.calls).toEqual([]); // nothing loaded while the prompt is open
+    answer(true);
+    await Promise.resolve();
+    expect(t.calls).toEqual(['load https://a.mp3 @0 x1', 'play']);
+  });
+
+  it('does not play when declined', async () => {
+    const t = setup({ beforeStream: async () => false });
+    t.player.getState().play(episode, podcast);
+    await Promise.resolve();
+    expect(t.calls).toEqual([]);
+    expect(t.player.getState().current).toBeNull();
+  });
+
+  it('is skipped for downloaded episodes', () => {
+    const beforeStream = jest.fn(async () => false);
+    const t = setup({ beforeStream });
+    t.library.getState().patchEpisode(key, { downloadedUri: 'file:///x.mp3' });
+    t.player.getState().play(episode, podcast);
+    expect(beforeStream).not.toHaveBeenCalled();
+    expect(t.calls[0]).toContain('load file:///x.mp3');
+  });
+
+  it('is not asked again when just resuming the loaded episode', async () => {
+    const beforeStream = jest.fn(async () => true);
+    const t = setup({ beforeStream });
+    t.player.getState().play(episode, podcast);
+    await Promise.resolve();
+    t.player.getState().toggle(); // pause
+    t.player.getState().toggle(); // resume
+    expect(beforeStream).toHaveBeenCalledTimes(1);
+  });
+
+  it('a newer play request wins over a slow prompt for an older one', async () => {
+    const answers: ((ok: boolean) => void)[] = [];
+    const t = setup({ beforeStream: () => new Promise<boolean>((r) => answers.push(r)) });
+    const other: Episode = { ...episode, id: 'e2', audioUrl: 'https://b.mp3' };
+    t.player.getState().play(episode, podcast);
+    t.player.getState().play(other, podcast);
+    answers[0](true);
+    answers[1](true);
+    await Promise.resolve();
+    expect(t.calls.filter((c) => c.startsWith('load'))).toEqual(['load https://b.mp3 @0 x1']);
+  });
+});
+
+describe('auto restart sleep timer', () => {
+  function withClock() {
+    jest.useFakeTimers();
+    let clock = 0;
+    const t = setup({ now: () => clock });
+    t.settings.getState().set({ autoRestartSleepTimer: true });
+    return { t, at: (ms: number) => (clock = ms) };
+  }
+  afterEach(() => jest.useRealTimers());
+
+  it('re-arms the same length when resuming within 5 minutes of the last pause', () => {
+    const { t, at } = withClock();
+    t.player.getState().play(episode, podcast);
+    t.player.getState().setSleep({ minutes: 30 });
+    at(10 * 60_000);
+    t.player.getState().toggle(); // pause at 10 min
+    at(13 * 60_000);
+    t.player.getState().toggle(); // resume 3 min later
+    expect(t.player.getState().sleep).toEqual({ kind: 'timer', endsAt: 13 * 60_000 + 30 * 60_000, minutes: 30 });
+  });
+
+  it('restarts after the timer itself stopped playback', () => {
+    const { t, at } = withClock();
+    t.player.getState().play(episode, podcast);
+    t.player.getState().setSleep({ minutes: 5 });
+    at(5 * 60_000 + 100);
+    jest.advanceTimersByTime(5 * 60_000 + 100);
+    expect(t.player.getState().sleep).toBeNull();
+    at(7 * 60_000);
+    t.player.getState().toggle(); // wake up, hit play 2 min later
+    expect(t.player.getState().sleep).toMatchObject({ kind: 'timer', minutes: 5 });
+  });
+
+  it('does not restart after more than 5 minutes', () => {
+    const { t, at } = withClock();
+    t.player.getState().play(episode, podcast);
+    t.player.getState().setSleep({ minutes: 5 });
+    at(5 * 60_000 + 100);
+    jest.advanceTimersByTime(5 * 60_000 + 100);
+    at(11 * 60_000);
+    t.player.getState().toggle();
+    expect(t.player.getState().sleep).toBeNull();
+  });
+
+  it('does nothing when the setting is off, or after the timer was turned off', () => {
+    const { t, at } = withClock();
+    t.settings.getState().set({ autoRestartSleepTimer: false });
+    t.player.getState().play(episode, podcast);
+    t.player.getState().setSleep({ minutes: 30 });
+    t.player.getState().toggle();
+    at(60_000);
+    t.player.getState().toggle();
+    // still the original timer (not re-armed from "now")
+    expect(t.player.getState().sleep).toMatchObject({ minutes: 30, endsAt: 30 * 60_000 });
+
+    const { t: t2, at: at2 } = withClock();
+    t2.player.getState().play(episode, podcast);
+    t2.player.getState().setSleep({ minutes: 30 });
+    t2.player.getState().setSleep(null);
+    t2.player.getState().toggle();
+    at2(60_000);
+    t2.player.getState().toggle();
+    expect(t2.player.getState().sleep).toBeNull();
+  });
+});
+
+describe('cache whole episodes', () => {
+  it('streams at once, then swaps to the cached file at the current position while playing', () => {
+    const t = setup({ cache: true });
+    t.settings.getState().set({ cacheWholeEpisodes: true });
+    t.player.getState().play(episode, podcast);
+    expect(t.calls).toEqual(['load https://a.mp3 @0 x1', 'play']);
+    expect(t.fakeCache.log).toEqual(['start p|e']);
+
+    t.emit({ positionSec: 42, playing: true });
+    t.calls.length = 0;
+    t.fakeCache.finish('p|e');
+    expect(t.calls).toEqual(['load file:///cache/p|e.mp3 @42 x1', 'play']);
+  });
+
+  it('stays paused if the file arrives while paused', () => {
+    const t = setup({ cache: true });
+    t.settings.getState().set({ cacheWholeEpisodes: true });
+    t.player.getState().play(episode, podcast);
+    t.emit({ positionSec: 10, playing: false });
+    t.calls.length = 0;
+    t.fakeCache.finish('p|e');
+    expect(t.calls).toEqual(['load file:///cache/p|e.mp3 @10 x1']);
+  });
+
+  it('is not started when off, when downloaded, or on web (no cache)', () => {
+    const a = setup({ cache: true });
+    a.player.getState().play(episode, podcast);
+    expect(a.fakeCache.log).toEqual([]);
+
+    const b = setup({ cache: true });
+    b.settings.getState().set({ cacheWholeEpisodes: true });
+    b.library.getState().patchEpisode(key, { downloadedUri: 'file:///x.mp3' });
+    b.player.getState().play(episode, podcast);
+    expect(b.fakeCache.log).toEqual([]);
+
+    const c = setup();
+    c.settings.getState().set({ cacheWholeEpisodes: true });
+    expect(() => c.player.getState().play(episode, podcast)).not.toThrow();
+  });
+
+  it('ignores a file that arrives after you moved on, and releases the old one', () => {
+    const t = setup({ cache: true });
+    t.settings.getState().set({ cacheWholeEpisodes: true });
+    t.player.getState().play(episode, podcast);
+    const other: Episode = { ...episode, id: 'e2', audioUrl: 'https://b.mp3' };
+    t.player.getState().play(other, podcast);
+    expect(t.fakeCache.log).toEqual(['start p|e', 'release p|e', 'start p|e2']);
+    t.calls.length = 0;
+    t.fakeCache.finish('p|e'); // already released: no-op
+    expect(t.calls).toEqual([]);
+  });
+
+  it('releases the file when the episode finishes', () => {
+    const t = setup({ cache: true });
+    t.settings.getState().set({ cacheWholeEpisodes: true });
+    t.player.getState().play(episode, podcast);
+    t.emit({ positionSec: 1800, finished: true, playing: false });
+    expect(t.fakeCache.log).toContain('release p|e');
+  });
+
+  it('plays from an already cached file without streaming or asking about data', async () => {
+    const beforeStream = jest.fn(async () => false);
+    const t = setup({ cache: true, beforeStream });
+    t.settings.getState().set({ cacheWholeEpisodes: true });
+    t.fakeCache.cache.start('p|e', 'https://a.mp3', () => {});
+    t.fakeCache.finish('p|e');
+    t.player.getState().play(episode, podcast);
+    expect(beforeStream).not.toHaveBeenCalled();
+    expect(t.calls[0]).toContain('load file:///cache/p|e.mp3');
   });
 });
