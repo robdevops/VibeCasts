@@ -10,6 +10,8 @@ export type Podcast = {
   website?: string;
   rating?: number;
   ratingCount?: number;
+  /** Added from an OPML file with only a title and feed URL: artwork and details are still to be filled in. */
+  needsMeta?: boolean;
 };
 
 export type Episode = {

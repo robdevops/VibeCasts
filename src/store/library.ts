@@ -5,6 +5,8 @@ import { kv } from '@/db/kv';
 import type { KV } from '@/db/storage';
 import { emptyEpisodeState, episodeKey, type EpisodeState } from '@/lib/episode-state';
 import { tileKey, type TileRef } from '@/lib/layout';
+import { normalizeFeedUrl, type OpmlFeed } from '@/lib/opml';
+import { rssPodcastId } from '@/lib/podcast-id';
 import type { PodcastSort } from '@/lib/podcast-sort';
 
 export type Subscription = {
@@ -19,6 +21,17 @@ export type Subscription = {
     skipLastSec?: number;
   };
 };
+
+export type ImportResult = { added: number; existing: number; folders: number };
+
+/** Details a feed knows about its own show. */
+export type PodcastMeta = { title?: string; author?: string; artwork?: string; category?: string; website?: string; description?: string };
+
+/** The subscription id already holding this feed (matched ignoring http/https), if any. */
+export function findSubscriptionByFeed(subscriptions: Record<string, Subscription>, feedUrl: string): string | undefined {
+  const key = normalizeFeedUrl(feedUrl);
+  return Object.keys(subscriptions).find((id) => !!subscriptions[id].podcast.feedUrl && normalizeFeedUrl(subscriptions[id].podcast.feedUrl) === key);
+}
 
 export type Folder = { id: string; name: string; color: string; createdAt?: number };
 
@@ -39,6 +52,10 @@ type Actions = {
   hydrated: boolean;
   hydrate(): Promise<void>;
   subscribe(p: Podcast): void;
+  /** Subscribe to many feeds from an OPML file, creating folders for named groups. */
+  importFeeds(feeds: OpmlFeed[]): ImportResult;
+  /** Fill in details read from the feed itself (artwork, author...) for an imported show. */
+  mergePodcastMeta(id: string, meta: PodcastMeta): void;
   unsubscribe(podcastId: string): void;
   createFolder(name: string, color: string): string;
   deleteFolder(folderId: string): void;
@@ -86,7 +103,8 @@ export function createLibraryStore(storage: KV = kv) {
     },
 
     subscribe(p) {
-      if (get().subscriptions[p.id]) return;
+      // The same show can arrive with different ids (iTunes id vs. an imported feed URL).
+      if (get().subscriptions[p.id] || (p.feedUrl && findSubscriptionByFeed(get().subscriptions, p.feedUrl))) return;
       const key = tileKey({ type: 'podcast', id: p.id });
       set((s) => ({
         subscriptions: {
@@ -95,6 +113,69 @@ export function createLibraryStore(storage: KV = kv) {
         },
         homeOrder: [...s.homeOrder, key],
       }));
+    },
+
+    importFeeds(feeds) {
+      const result: ImportResult = { added: 0, existing: 0, folders: 0 };
+      set((s) => {
+        const subscriptions = { ...s.subscriptions };
+        const folders = { ...s.folders };
+        const folderOrder = { ...s.folderOrder };
+        const homeOrder = [...s.homeOrder];
+        const folderByName = new Map(Object.values(folders).map((f) => [f.name.toLowerCase(), f.id]));
+        const at = Date.now();
+
+        for (const feed of feeds) {
+          if (findSubscriptionByFeed(subscriptions, feed.feedUrl)) {
+            result.existing++;
+            continue;
+          }
+          let folderId: string | undefined;
+          if (feed.folder) {
+            folderId = folderByName.get(feed.folder.toLowerCase());
+            if (!folderId) {
+              folderId = `${(at + result.folders).toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+              folders[folderId] = { id: folderId, name: feed.folder, color: FOLDER_COLORS[Object.keys(folders).length % FOLDER_COLORS.length], createdAt: at };
+              folderOrder[folderId] = [];
+              homeOrder.push(tileKey({ type: 'folder', id: folderId }));
+              folderByName.set(feed.folder.toLowerCase(), folderId);
+              result.folders++;
+            }
+          }
+          const id = rssPodcastId(feed.feedUrl);
+          subscriptions[id] = {
+            podcast: { id, title: feed.title, author: '', artwork: '', feedUrl: feed.feedUrl, website: feed.htmlUrl, needsMeta: true },
+            subscribedAt: at + result.added,
+            folderId,
+            overrides: {},
+          };
+          if (folderId) folderOrder[folderId] = [...(folderOrder[folderId] ?? []), id];
+          else homeOrder.push(tileKey({ type: 'podcast', id }));
+          result.added++;
+        }
+        return result.added ? { subscriptions, folders, folderOrder, homeOrder } : s;
+      });
+      return result;
+    },
+
+    mergePodcastMeta(id, meta) {
+      set((s) => {
+        const sub = s.subscriptions[id];
+        if (!sub) return s;
+        const p = sub.podcast;
+        const next = {
+          ...p,
+          // An imported title is only a placeholder from the file; the feed's own title wins once, then it's the user's.
+          title: p.needsMeta ? meta.title || p.title : p.title,
+          author: p.author || meta.author || '',
+          artwork: p.artwork || meta.artwork || '',
+          category: p.category ?? meta.category,
+          website: p.website ?? meta.website,
+          description: p.description ?? meta.description,
+          needsMeta: false,
+        };
+        return { subscriptions: { ...s.subscriptions, [id]: { ...sub, podcast: next } } };
+      });
     },
 
     unsubscribe(id) {
@@ -232,3 +313,10 @@ export function createLibraryStore(storage: KV = kv) {
 export const useLibrary = createLibraryStore();
 
 export type { TileRef };
+
+/** What an import would do, without changing anything (for the preview step). */
+export function previewImport(feeds: OpmlFeed[], subscriptions: Record<string, Subscription>) {
+  const existing = feeds.filter((f) => findSubscriptionByFeed(subscriptions, f.feedUrl)).length;
+  const folders = new Set(feeds.filter((f) => f.folder).map((f) => f.folder!.toLowerCase())).size;
+  return { found: feeds.length, existing, fresh: feeds.length - existing, folders };
+}

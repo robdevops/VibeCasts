@@ -32,3 +32,15 @@ export function nearCenter(x: number, y: number, r: Rect, frac = 0.3): boolean {
   const cy = r.top + r.size / 2;
   return Math.abs(x - cx) <= r.size * frac && Math.abs(y - cy) <= r.size * frac;
 }
+
+/**
+ * Index range [start, end) of tiles worth mounting for a scroll position: the rows in view plus
+ * `overscanRows` either side, so large libraries don't mount hundreds of gesture-wrapped tiles.
+ */
+export function visibleRange(scrollY: number, viewportH: number, m: GridMetrics, count: number, overscanRows = 2) {
+  if (count <= 0 || m.tile <= 0) return { start: 0, end: Math.max(0, count) };
+  const step = m.tile + m.gap;
+  const first = Math.max(0, Math.floor((scrollY - m.pad) / step) - overscanRows);
+  const last = Math.floor((scrollY + viewportH - m.pad) / step) + overscanRows;
+  return { start: Math.min(count, first * m.cols), end: Math.min(count, (last + 1) * m.cols) };
+}

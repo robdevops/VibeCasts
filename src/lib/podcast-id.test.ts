@@ -1,4 +1,4 @@
-import { hostLabel, isFeedUrl, rssPodcastId, splitCredentials, toFeedUrl } from './podcast-id';
+import { feedCandidates, hostLabel, isFeedUrl, rssPodcastId, splitCredentials, toFeedUrl } from './podcast-id';
 
 describe('toFeedUrl', () => {
   it.each([
@@ -61,5 +61,12 @@ describe('hostLabel', () => {
     expect(hostLabel('https://www.example.com/path/to?token=secret')).toBe('example.com');
     expect(hostLabel('http://feeds.example.org:8080/x')).toBe('feeds.example.org');
     expect(hostLabel('not a url/with path')).toBe('not a url');
+  });
+});
+
+describe('feedCandidates', () => {
+  it('tries https before http, and leaves https alone', () => {
+    expect(feedCandidates('http://a.example/f?t=Ab')).toEqual(['https://a.example/f?t=Ab', 'http://a.example/f?t=Ab']);
+    expect(feedCandidates('https://a.example/f')).toEqual(['https://a.example/f']);
   });
 });

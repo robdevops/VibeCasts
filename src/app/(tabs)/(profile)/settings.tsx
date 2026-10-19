@@ -2,6 +2,7 @@ import { Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { LibrarySection } from '@/components/settings/library-section';
 import { Icon } from '@/components/ui/icon';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { useTheme } from '@/hooks/use-theme';
@@ -63,6 +64,7 @@ export default function SettingsScreen() {
         <ThemedText type="small" themeColor="textSecondary" style={styles.note}>
           The lock-screen and headset buttons use a fixed 10 second skip set by the operating system.
         </ThemedText>
+        <LibrarySection />
       </ScrollView>
     </ThemedView>
   );

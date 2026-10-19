@@ -15,7 +15,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Icon } from '@/components/ui/icon';
 import { HEADER_HEIGHT } from '@/components/ui/screen-header';
 import { useTheme } from '@/hooks/use-theme';
-import { contentHeight, metricsFor, nearCenter, slotAt, slotRect, type GridMetrics } from '@/lib/grid';
+import { contentHeight, metricsFor, nearCenter, slotAt, slotRect, visibleRange, type GridMetrics } from '@/lib/grid';
 import { reorder } from '@/lib/layout';
 
 export type GridItem = { key: string; kind: 'podcast' | 'folder' };
@@ -75,6 +75,8 @@ export function TileGrid({
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [hoverFolder, setHoverFolder] = useState<string | null>(null);
   const [overRemove, setOverRemove] = useState(false);
+  // Only tiles in (or near) view are mounted; [start, end) are indexes into the displayed order.
+  const [win, setWin] = useState({ start: 0, end: 60 });
 
   const drag = useRef<Drag | null>(null);
   const orderRef = useRef<string[]>([]);
@@ -86,6 +88,17 @@ export function TileGrid({
 
   const byKey = useMemo(() => new Map(items.map((i) => [i.key, i])), [items]);
   const displayKeys = order ?? items.map((i) => i.key);
+
+  const updateWindow = useCallback(
+    (y: number) => {
+      const next = visibleRange(y, viewportH.current || windowHeight, m, items.length);
+      setWin((w) => (w.start === next.start && w.end === next.end ? w : next));
+    },
+    [items.length, m, windowHeight],
+  );
+  useEffect(() => {
+    updateWindow(scrollNow.current);
+  }, [updateWindow]);
 
   const removeBottom = insets.top + HEADER_HEIGHT;
 
@@ -239,6 +252,7 @@ export function TileGrid({
         onScroll={(e) => {
           scrollNow.current = e.nativeEvent.contentOffset.y;
           scrollY.set(scrollNow.current);
+          updateWindow(scrollNow.current);
         }}
         refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} /> : undefined}
         contentContainerStyle={{ minHeight: height }}>
@@ -247,6 +261,7 @@ export function TileGrid({
             {displayKeys.map((key, index) => {
               const item = byKey.get(key);
               if (!item) return null;
+              if ((index < win.start || index >= win.end) && key !== activeKey) return null;
               return (
                 <Cell
                   key={key}

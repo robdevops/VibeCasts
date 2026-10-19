@@ -34,3 +34,9 @@ Node 24 (`.nvmrc`), Xcode (iOS Simulator), Android Studio (AVD). `npx expo start
 - Runaway protection: `store/player.ts` checks every reported position against the wall clock (`isPlausibleAdvance`). A player that races ahead silently (seen after a long screen-off) is paused and put back at the last good position, the bad position is never saved, and the episode is never marked played from it. Keep any new status handling behind that check.
 - `patches/expo-audio+57.0.5.patch` (applied by `postinstall: patch-package`) adds `setWakeMode(WAKE_MODE_NETWORK)` to the Android ExoPlayer, because expo-audio holds no wake/Wi-Fi lock and streaming could stall with the screen off. It needs `WAKE_LOCK` in `app.json`. If `expo-audio` is upgraded, regenerate the patch or drop it if upstream added a wake mode. Needs a native rebuild to take effect.
 - The player buffers `FORWARD_BUFFER_SEC` (10 min) ahead so short network drops and long screen-off periods don't interrupt audio.
+
+## OPML import/export
+- `src/lib/opml.ts` parses/builds OPML (pure, tested against a sanitised fixture). Settings > Library (`components/settings/library-section.tsx`) previews, imports (`library.importFeeds`, deduped by `normalizeFeedUrl`, so http == https and iTunes-id subscriptions match) and exports (`opml-io.ts`: document picker + share sheet, Blob download on web).
+- Imported shows are `needsMeta`; `feeds.backfill` fetches their feed 3 at a time and `mergePodcastMeta` fills in artwork/author/title (banner on the Podcasts screen).
+- The persisted feed cache is slim (newest 50 episodes, no show notes); the full feed lives in memory. `TileGrid` mounts only rows near the viewport (`visibleRange`).
+- Feeds given as http are tried over https first (`feedCandidates`); the build allows cleartext (`expo-build-properties`, iOS ATS) for feeds and audio that only offer http.

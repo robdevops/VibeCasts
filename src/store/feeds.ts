@@ -4,17 +4,18 @@ import { fetchFeedText } from '@/api/feed-fetch';
 import { parseFeed } from '@/api/rss';
 import type { Episode, ParsedFeed, Podcast } from '@/api/types';
 import { kv } from '@/db/kv';
+import { useLibrary } from './library';
 import type { KV } from '@/db/storage';
 
 /** Newest episodes kept per show in the persisted cache. */
-const MAX_CACHED = 100;
+const MAX_CACHED = 50;
 const STORAGE_KEY = 'feeds.v1';
 export const STALE_MS = 30 * 60 * 1000;
 
 export type FeedEntry = { fetchedAt: number; total: number; episodes: Episode[] };
 
 /** Show details read from the feed itself. */
-export type FeedMeta = { description?: string; website?: string; category?: string; author?: string; artwork?: string };
+export type FeedMeta = { title?: string; description?: string; website?: string; category?: string; author?: string; artwork?: string };
 
 /** Whole feed, held in memory only for the current session. */
 export type FullFeed = { episodes: Episode[]; meta: FeedMeta };
@@ -34,17 +35,36 @@ type Actions = {
   ingest(podcast: Podcast, parsed: ParsedFeed): void;
   refresh(podcast: Podcast): Promise<void>;
   refreshAll(podcasts: Podcast[], opts?: { onlyStale?: boolean }): Promise<void>;
+  /** Fetch details for shows added from a file (3 at a time), reporting progress for a banner. */
+  backfill(podcasts: Podcast[]): Promise<void>;
+  /** Null when no backfill is running. */
+  backfillProgress: { done: number; total: number } | null;
 };
+
+/** Persisted copy without show notes (the biggest part of a feed); they come back with the next fetch. */
+function slim(feeds: Record<string, FeedEntry>): Record<string, FeedEntry> {
+  const out: Record<string, FeedEntry> = {};
+  for (const [id, f] of Object.entries(feeds)) {
+    out[id] = { ...f, episodes: f.episodes.map(({ description: _d, ...e }) => e as Episode) };
+  }
+  return out;
+}
 
 export type FetchText = (url: string) => Promise<string>;
 
-export function createFeedStore(storage: KV = kv, fetchText: FetchText = fetchFeedText) {
+export function createFeedStore(
+  storage: KV = kv,
+  fetchText: FetchText = fetchFeedText,
+  /** Called with a show's own details after each successful fetch (fills in imported shows). */
+  onMeta: (podcastId: string, meta: FeedMeta) => void = () => {},
+) {
   const store = create<FeedData & Actions>()((set, get) => ({
     feeds: {},
     known: {},
     loading: {},
     full: {},
     hydrated: false,
+    backfillProgress: null,
 
     remember(p) {
       if (get().known[p.id]?.feedUrl === p.feedUrl && get().known[p.id]?.title === p.title) return;
@@ -75,6 +95,7 @@ export function createFeedStore(storage: KV = kv, fetchText: FetchText = fetchFe
         },
         full: { ...s.full, [podcast.id]: { episodes: sorted, meta: parsed.podcast } },
       }));
+      onMeta(podcast.id, parsed.podcast);
     },
 
     async refresh(podcast) {
@@ -99,6 +120,25 @@ export function createFeedStore(storage: KV = kv, fetchText: FetchText = fetchFe
         await Promise.all(todo.slice(i, i + 4).map((p) => get().refresh(p)));
       }
     },
+
+    async backfill(podcasts) {
+      if (get().backfillProgress) return;
+      const todo = podcasts.filter((p) => p.needsMeta && p.feedUrl);
+      if (!todo.length) return;
+      set({ backfillProgress: { done: 0, total: todo.length } });
+      let next = 0;
+      const worker = async () => {
+        while (next < todo.length) {
+          const p = todo[next++];
+          await get().refresh(p);
+          set((s) => ({ backfillProgress: s.backfillProgress && { ...s.backfillProgress, done: s.backfillProgress.done + 1 } }));
+          // Let the UI breathe between big XML parses.
+          await new Promise((r) => setTimeout(r, 0));
+        }
+      };
+      await Promise.all([worker(), worker(), worker()]);
+      set({ backfillProgress: null });
+    },
   }));
 
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -106,11 +146,11 @@ export function createFeedStore(storage: KV = kv, fetchText: FetchText = fetchFe
     if (!s.hydrated || (s.feeds === prev.feeds && s.known === prev.known)) return;
     clearTimeout(timer);
     timer = setTimeout(() => {
-      storage.setItem(STORAGE_KEY, JSON.stringify({ feeds: s.feeds, known: s.known })).catch(() => {});
+      storage.setItem(STORAGE_KEY, JSON.stringify({ feeds: slim(s.feeds), known: s.known })).catch(() => {});
     }, 500);
   });
 
   return store;
 }
 
-export const useFeeds = createFeedStore();
+export const useFeeds = createFeedStore(kv, fetchFeedText, (id, meta) => useLibrary.getState().mergePodcastMeta(id, meta));
