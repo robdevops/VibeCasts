@@ -21,6 +21,7 @@ import { useSettings } from '@/store/settings';
 import { useToast } from '@/store/toast';
 
 import { SkipIcon } from './skip-icon';
+import { SwipeIgnore, SwipeTabs } from './swipe-tabs';
 import { SleepSheet } from './sleep-sheet';
 import { SpeedSheet } from './speed-sheet';
 
@@ -67,6 +68,7 @@ export default function EpisodeScreen() {
   const [sheet, setSheet] = useState<Sheet>(null);
   const [scrub, setScrub] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const tabList: Tab[] = isCurrent ? ['playing', 'details', 'bookmarks'] : ['details', 'bookmarks'];
 
   // Tick once a second so the sleep-timer countdown stays fresh while the sheet is open.
   useEffect(() => {
@@ -143,8 +145,9 @@ export default function EpisodeScreen() {
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
-      <Header tab={tab} tabs={isCurrent ? ['playing', 'details', 'bookmarks'] : ['details', 'bookmarks']} onTab={setTab} onClose={close} />
+      <Header tab={tab} tabs={tabList} onTab={setTab} onClose={close} />
 
+      <SwipeTabs tabs={tabList} tab={tab} onTab={setTab}>
       {tab === 'playing' && isCurrent ? (
         <View style={styles.body}>
           <View style={styles.artWrap}>
@@ -161,7 +164,7 @@ export default function EpisodeScreen() {
             </Pressable>
           </View>
 
-          <View style={styles.scrubWrap}>
+          <SwipeIgnore style={styles.scrubWrap}>
             <Slider
               accessibilityLabel="Seek"
               style={styles.slider}
@@ -181,7 +184,7 @@ export default function EpisodeScreen() {
               <ThemedText type="small" style={styles.time}>{formatClock(position)}</ThemedText>
               <ThemedText type="small" style={styles.time}>-{formatClock(Math.max(0, duration - position))}</ThemedText>
             </View>
-          </View>
+          </SwipeIgnore>
 
           <View style={styles.controls}>
             <Pressable accessibilityRole="button" accessibilityLabel={`Skip back ${skipBack} seconds`} onPress={() => usePlayer.getState().skipBack()} hitSlop={10}>
@@ -263,6 +266,7 @@ export default function EpisodeScreen() {
           )}
         </ScrollView>
       )}
+      </SwipeTabs>
 
       <SpeedSheet visible={sheet === 'speed'} rate={rate} onChange={(r) => usePlayer.getState().setRate(r)} onClose={() => setSheet(null)} />
       <SleepSheet visible={sheet === 'sleep'} sleep={sleep} now={now} onChoose={(o) => usePlayer.getState().setSleep(o)} onClose={() => setSheet(null)} />
