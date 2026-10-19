@@ -17,14 +17,34 @@ const podcast: Podcast = { id: 'p', title: 'Show', author: 'A', artwork: 'art', 
 const episode: Episode = { id: 'e', podcastId: 'p', title: 'Ep', description: '', audioUrl: 'https://a.mp3', published: 0, durationSec: 1800 };
 const key = episodeKey('p', 'e');
 
-function setup(opts: { now?: () => number } = {}) {
+/** Controllable foreground/background signal. */
+function createFakeAppState(initiallyActive = true) {
+  let active = initiallyActive;
+  const listeners = new Set<(a: boolean) => void>();
+  return {
+    appState: {
+      isActive: () => active,
+      subscribe: (l: (a: boolean) => void) => {
+        listeners.add(l);
+        return () => listeners.delete(l);
+      },
+    },
+    set(next: boolean) {
+      active = next;
+      listeners.forEach((l) => l(next));
+    },
+  };
+}
+
+function setup(opts: { now?: () => number; active?: boolean } = {}) {
   const fake = createFakeEngine();
+  const app = createFakeAppState(opts.active ?? true);
   const storage = createMemoryKV();
   const library = createLibraryStore(createMemoryKV());
   const settings = createSettingsStore(createMemoryKV());
   library.getState().subscribe(podcast);
-  const player = createPlayerStore({ engine: fake.engine, storage, library, settings, now: opts.now });
-  return { ...fake, storage, library, settings, player };
+  const player = createPlayerStore({ engine: fake.engine, storage, library, settings, now: opts.now, appState: app.appState });
+  return { ...fake, storage, library, settings, player, setActive: app.set };
 }
 
 it('plays an episode, loading it with lock-screen metadata inputs and the saved rate', () => {
@@ -173,4 +193,82 @@ it('reports a failed load, stays paused and keeps the saved spot so retry resume
   expect(useToast.getState().message).toMatch(/Couldn't play/);
   t.player.getState().toggle(); // retry reloads from where it was
   expect(t.calls.filter((c) => c.startsWith('load'))).toEqual(['load https://a.mp3 @60 x1', 'load https://a.mp3 @60 x1']);
+});
+
+describe('in the background', () => {
+  it('does not publish position updates to the UI but still saves progress', () => {
+    const t = setup();
+    t.player.getState().play(episode, podcast);
+    t.emit({ positionSec: 2, playing: true });
+    expect(t.player.getState().positionSec).toBe(2);
+
+    t.setActive(false);
+    t.emit({ positionSec: 30, playing: true });
+    t.emit({ positionSec: 60, playing: true });
+    expect(t.player.getState().positionSec).toBe(2); // UI copy untouched: no re-renders
+    expect(t.library.getState().episodes[key].progressMs).toBeGreaterThan(0); // but progress is saved
+    expect(t.library.getState().episodes[key].progressMs).toBe(60_000);
+  });
+
+  it('does not re-render subscribers for position ticks while backgrounded', () => {
+    const t = setup();
+    t.player.getState().play(episode, podcast);
+    t.setActive(false);
+    const listener = jest.fn();
+    const unsub = t.player.subscribe(listener);
+    t.emit({ positionSec: 10, playing: true });
+    t.emit({ positionSec: 11, playing: true });
+    t.emit({ positionSec: 12, playing: true });
+    expect(listener).not.toHaveBeenCalled();
+    unsub();
+  });
+
+  it('syncs the UI position once when the app returns to the foreground', () => {
+    const t = setup();
+    t.player.getState().play(episode, podcast);
+    t.setActive(false);
+    t.emit({ positionSec: 300, playing: true });
+    expect(t.player.getState().positionSec).toBe(0);
+    t.setActive(true);
+    expect(t.player.getState().positionSec).toBe(300);
+  });
+
+  it('still passes play/pause changes through', () => {
+    const t = setup();
+    t.player.getState().play(episode, podcast);
+    t.setActive(false);
+    t.emit({ positionSec: 10, playing: false });
+    expect(t.player.getState().playing).toBe(false);
+  });
+
+  it('still ends the episode and honours the sleep timer', () => {
+    jest.useFakeTimers();
+    let clock = 0;
+    const t = setup({ now: () => clock });
+    t.player.getState().play(episode, podcast);
+    t.setActive(false);
+    t.player.getState().setSleep({ minutes: 1 });
+    clock = 61_000;
+    t.emit({ positionSec: 5, playing: true });
+    expect(t.player.getState().playing).toBe(false);
+    expect(t.player.getState().sleep).toBeNull();
+    jest.useRealTimers();
+
+    const t2 = setup();
+    t2.player.getState().play(episode, podcast);
+    t2.setActive(false);
+    t2.emit({ positionSec: 1800, finished: true, playing: false });
+    expect(t2.library.getState().episodes[key]).toMatchObject({ played: true });
+  });
+
+  it('seeks relative to the true position, not the stale UI one', () => {
+    const t = setup();
+    t.settings.getState().set({ skipForwardSec: 30 });
+    t.player.getState().play(episode, podcast);
+    t.setActive(false);
+    t.emit({ positionSec: 100, playing: true });
+    t.setActive(true);
+    t.player.getState().skipForward();
+    expect(t.player.getState().positionSec).toBe(130);
+  });
 });

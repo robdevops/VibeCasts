@@ -28,6 +28,13 @@ export interface PlayerEngine {
 }
 
 /**
+ * How often the native player pushes status to JavaScript. Every update wakes the JS thread, which
+ * costs battery during long listens (the interval is fixed when the player is created). Once a
+ * second is plenty for a progress bar; the store stops publishing it to React in the background.
+ */
+export const STATUS_INTERVAL_MS = 1000;
+
+/**
  * Lock-screen controls on Android need a foreground media service that Expo Go's manifest does not
  * declare, so there they only work in a development/production build. (iOS Expo Go is fine.)
  */
@@ -74,7 +81,7 @@ export function createExpoEngine(): PlayerEngine {
 
   const ensurePlayer = () => {
     if (player) return player;
-    player = createAudioPlayer(null, { updateInterval: 250, keepAudioSessionActive: true });
+    player = createAudioPlayer(null, { updateInterval: STATUS_INTERVAL_MS, keepAudioSessionActive: true });
     player.addListener('playbackStatusUpdate', (s: AudioStatus) => {
       if (s.isLoaded && !applied) {
         // Seeking and rate changes issued before the source loads are dropped, so apply them now.
