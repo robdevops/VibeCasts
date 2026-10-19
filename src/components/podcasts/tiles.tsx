@@ -17,7 +17,7 @@ const shadow = {
 export function PodcastTile({ podcast, unplayed, size }: { podcast: Podcast; unplayed: number; size: number }) {
   return (
     <View style={{ width: size, height: size }} accessibilityLabel={podcast.title} accessibilityRole="button">
-      <Artwork uri={podcast.artwork} title={podcast.title} size={size} radius={12} style={shadow} />
+      <Artwork uri={podcast.artwork} title={podcast.title} size={size} radius={8} style={shadow} />
       <Badge count={unplayed} />
     </View>
   );
@@ -48,7 +48,7 @@ export function FolderTile({
         {[0, 1, 2, 3].map((i) => {
           const p = first[i];
           return p ? (
-            <Artwork key={p.id} uri={p.artwork} title={p.title} size={cell} radius={5} />
+            <Artwork key={p.id} uri={p.artwork} title={p.title} size={cell} radius={3} />
           ) : (
             <View key={i} style={[styles.empty, { width: cell, height: cell }]} />
           );
@@ -63,8 +63,8 @@ export function FolderTile({
 }
 
 const styles = StyleSheet.create({
-  folder: { borderRadius: 12, padding: 10, paddingBottom: 4 },
+  folder: { borderRadius: 8, padding: 10, paddingBottom: 4 },
   mosaic: { flexDirection: 'row', flexWrap: 'wrap', alignSelf: 'center' },
-  empty: { borderRadius: 5, backgroundColor: 'rgba(255,255,255,0.22)' },
+  empty: { borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.22)' },
   name: { color: '#fff', fontWeight: '700', fontSize: 14, textAlign: 'center', marginTop: 'auto', marginBottom: 2, textShadowColor: 'rgba(0,0,0,0.25)', textShadowRadius: 3 },
 });
