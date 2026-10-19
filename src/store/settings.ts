@@ -8,8 +8,14 @@ export type SettingsData = {
   skipForwardSec: number;
   playbackRate: number;
   deleteOnFinish: boolean;
-  downloadBeforePlay: boolean;
-  wifiOnly: boolean;
+  /** Resume 2 s before where you left off. */
+  intelligentResume: boolean;
+  /** Ask before streaming over mobile data. */
+  warnMobileData: boolean;
+  /** Re-arm the sleep timer when you resume within 5 minutes of the last pause. */
+  autoRestartSleepTimer: boolean;
+  /** Fetch the whole episode in one burst while streaming, then play from the file. */
+  cacheWholeEpisodes: boolean;
 };
 
 const defaults: SettingsData = {
@@ -17,8 +23,10 @@ const defaults: SettingsData = {
   skipForwardSec: 30,
   playbackRate: 1,
   deleteOnFinish: false,
-  downloadBeforePlay: false,
-  wifiOnly: false,
+  intelligentResume: true,
+  warnMobileData: true,
+  autoRestartSleepTimer: false,
+  cacheWholeEpisodes: false,
 };
 
 type Actions = { hydrated: boolean; hydrate(): Promise<void>; set(patch: Partial<SettingsData>): void };
@@ -32,7 +40,12 @@ export function createSettingsStore(storage: KV = kv) {
     async hydrate() {
       try {
         const raw = await storage.getItem(STORAGE_KEY);
-        if (raw) set({ ...defaults, ...(JSON.parse(raw) as Partial<SettingsData>) });
+        if (raw) {
+          const saved = JSON.parse(raw) as Partial<SettingsData>;
+          // Keep only known keys so settings that no longer exist (e.g. wifiOnly) are dropped.
+          const known = Object.fromEntries(Object.entries(saved).filter(([k]) => k in defaults));
+          set({ ...defaults, ...known });
+        }
       } catch {
         // Fall back to defaults.
       }
@@ -48,8 +61,10 @@ export function createSettingsStore(storage: KV = kv) {
       skipForwardSec: s.skipForwardSec,
       playbackRate: s.playbackRate,
       deleteOnFinish: s.deleteOnFinish,
-      downloadBeforePlay: s.downloadBeforePlay,
-      wifiOnly: s.wifiOnly,
+      intelligentResume: s.intelligentResume,
+      warnMobileData: s.warnMobileData,
+      autoRestartSleepTimer: s.autoRestartSleepTimer,
+      cacheWholeEpisodes: s.cacheWholeEpisodes,
     };
     storage.setItem(STORAGE_KEY, JSON.stringify(data)).catch(() => {});
   });

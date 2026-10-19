@@ -9,11 +9,13 @@ import { useSettings } from '@/store/settings';
 
 const STEPS = [5, 10, 15, 20, 30, 45, 60, 90];
 
+type BoolKey = 'deleteOnFinish' | 'intelligentResume' | 'warnMobileData' | 'autoRestartSleepTimer' | 'cacheWholeEpisodes';
+
 export default function SettingsScreen() {
   const theme = useTheme();
   const s = useSettings();
 
-  const toggle = (label: string, hint: string, value: boolean, key: 'deleteOnFinish' | 'downloadBeforePlay' | 'wifiOnly') => (
+  const toggle = (label: string, hint: string, value: boolean, key: BoolKey) => (
     <View style={[styles.row, { borderBottomColor: theme.border }]}>
       <View style={{ flex: 1, gap: 2 }}>
         <ThemedText>{label}</ThemedText>
@@ -53,15 +55,14 @@ export default function SettingsScreen() {
         </ThemedText>
         {stepper('Skip back', s.skipBackSec, 'skipBackSec')}
         {stepper('Skip forward', s.skipForwardSec, 'skipForwardSec')}
+        {toggle('Intelligent resume', 'Resume 2 seconds before where you left off.', s.intelligentResume, 'intelligentResume')}
+        {toggle('Warn when using mobile data', 'Ask before streaming over mobile data, with options to allow once or always.', s.warnMobileData, 'warnMobileData')}
+        {toggle('Auto restart sleep timer', 'If you resume within 5 minutes of the last pause, the sleep timer starts again.', s.autoRestartSleepTimer, 'autoRestartSleepTimer')}
+        {toggle('Cache whole episodes', 'Download the whole episode as fast as possible while it plays, instead of keeping the radio awake to stream it. Saves battery; the temporary file is removed afterwards.', s.cacheWholeEpisodes, 'cacheWholeEpisodes')}
         {toggle('Delete episode when finished', 'Removes the downloaded file once you finish listening.', s.deleteOnFinish, 'deleteOnFinish')}
         <ThemedText type="small" themeColor="textSecondary" style={styles.note}>
           The lock-screen and headset buttons use a fixed 10 second skip set by the operating system.
         </ThemedText>
-        <ThemedText type="smallBold" themeColor="textSecondary" style={styles.section}>
-          DOWNLOADS & DATA
-        </ThemedText>
-        {toggle('Download before playing', 'Download the whole episode before it starts.', s.downloadBeforePlay, 'downloadBeforePlay')}
-        {toggle('Stream on Wi-Fi only', 'Don’t use mobile data to stream or download.', s.wifiOnly, 'wifiOnly')}
       </ScrollView>
     </ThemedView>
   );
