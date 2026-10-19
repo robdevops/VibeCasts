@@ -1,4 +1,4 @@
-import { isPlausibleAdvance, needsMobileDataWarning, resumeFrom, shouldRestartSleep } from './playback-rules';
+import { isLostPlace, isPlausibleAdvance, needsMobileDataWarning, resumeFrom, shouldRestartSleep } from './playback-rules';
 
 describe('resumeFrom', () => {
   it('steps back two seconds when on', () => {
@@ -52,5 +52,18 @@ describe('isPlausibleAdvance', () => {
   it('treats going backwards or standing still as fine', () => {
     expect(isPlausibleAdvance({ fromSec: 500, toSec: 400, wallSec: 1, rate: 1 })).toBe(true);
     expect(isPlausibleAdvance({ fromSec: 500, toSec: 500, wallSec: 10, rate: 1 })).toBe(true);
+  });
+});
+
+describe('isLostPlace', () => {
+  it('flags a fall back to the start from deep in the episode', () => {
+    expect(isLostPlace({ knownSec: 3300, reportedSec: 0 })).toBe(true);
+    expect(isLostPlace({ knownSec: 120, reportedSec: 3 })).toBe(true);
+  });
+  it('does not flag normal playback, short rewinds or scrubbing elsewhere', () => {
+    expect(isLostPlace({ knownSec: 3300, reportedSec: 3301 })).toBe(false);
+    expect(isLostPlace({ knownSec: 3300, reportedSec: 3290 })).toBe(false);
+    expect(isLostPlace({ knownSec: 3300, reportedSec: 1200 })).toBe(false);
+    expect(isLostPlace({ knownSec: 20, reportedSec: 0 })).toBe(false);
   });
 });
