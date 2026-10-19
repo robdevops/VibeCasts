@@ -27,6 +27,9 @@ export type SettingsData = {
   downloadOnlyCharging: boolean;
   /** Which connections may download automatically. */
   downloadNetwork: NetworkRule;
+  /** Show the skip-back / skip-forward buttons on the lock screen, notification and headset controls. */
+  lockScreenSkipBack: boolean;
+  lockScreenSkipForward: boolean;
 };
 
 const defaults: SettingsData = {
@@ -43,6 +46,8 @@ const defaults: SettingsData = {
   autoDownloadLimit: 3,
   downloadOnlyCharging: false,
   downloadNetwork: 'wifi',
+  lockScreenSkipBack: true,
+  lockScreenSkipForward: true,
 };
 
 type Actions = { hydrated: boolean; hydrate(): Promise<void>; set(patch: Partial<SettingsData>): void };
@@ -86,6 +91,8 @@ export function createSettingsStore(storage: KV = kv) {
       autoDownloadLimit: s.autoDownloadLimit,
       downloadOnlyCharging: s.downloadOnlyCharging,
       downloadNetwork: s.downloadNetwork,
+      lockScreenSkipBack: s.lockScreenSkipBack,
+      lockScreenSkipForward: s.lockScreenSkipForward,
     };
     storage.setItem(STORAGE_KEY, JSON.stringify(data)).catch(() => {});
   });

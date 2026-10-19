@@ -47,7 +47,7 @@ type Deps = {
   storage: KV;
   /** Library/settings are injected so tests can use isolated instances. */
   library: Pick<typeof useLibrary, 'getState'>;
-  settings: Pick<typeof useSettings, 'getState'>;
+  settings: Pick<typeof useSettings, 'getState' | 'subscribe'>;
   now: () => number;
   /** Foreground/background signal. Faked in tests. */
   appState: { isActive(): boolean; subscribe(onChange: (active: boolean) => void): () => void };
@@ -560,6 +560,14 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
       },
     };
   });
+
+  // Lock-screen / headset skip buttons follow the settings (now and whenever they change).
+  const applyButtons = () => {
+    const s = settings.getState();
+    engine.setLockScreenButtons({ back: s.lockScreenSkipBack, forward: s.lockScreenSkipForward });
+  };
+  applyButtons();
+  settings.subscribe(applyButtons);
 
   return store;
 }

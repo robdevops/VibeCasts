@@ -14,7 +14,7 @@ jest.mock('expo-network', () => ({ getNetworkStateAsync: jest.fn(), NetworkState
 jest.mock('expo-file-system', () => ({ Directory: class {}, File: class {}, Paths: { cache: '' } }));
 // The module-level singleton builds a real engine on import; give it a no-op one.
 jest.mock('@/player/engine', () => ({
-  createExpoEngine: () => ({ load() {}, play() {}, pause() {}, seekTo() {}, setRate() {}, subscribe: () => () => {} }),
+  createExpoEngine: () => ({ load() {}, play() {}, pause() {}, seekTo() {}, setRate() {}, setLockScreenButtons() {}, subscribe: () => () => {} }),
 }));
 
 const podcast: Podcast = { id: 'p', title: 'Show', author: 'A', artwork: 'art', feedUrl: 'https://f' };
@@ -686,5 +686,14 @@ describe('keeping your place after the player is reset (overnight)', () => {
     const t = listenTo(1350);
     t.reset();
     expect(t.log.text()).toMatch(/lost-place good=1350/);
+  });
+});
+
+describe('lock-screen and headset buttons', () => {
+  it('tells the engine which skip buttons to show, now and when the setting changes', () => {
+    const t = setup();
+    expect(t.buttonCalls).toContain('back=true forward=true');
+    t.settings.getState().set({ lockScreenSkipForward: false });
+    expect(t.buttonCalls).toContain('back=true forward=false');
   });
 });
