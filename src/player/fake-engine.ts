@@ -4,6 +4,8 @@ import type { EngineStatus, NowPlayingMeta, PlayerEngine } from './engine';
 export function createFakeEngine() {
   const listeners = new Set<(s: EngineStatus) => void>();
   const calls: string[] = [];
+  /** Lock-screen button settings the store applied (kept apart from `calls` so those stay about playback). */
+  const buttonCalls: string[] = [];
   const state = { lazyLoad: false, pendingStart: 0, uri: '', position: 0, duration: 1800, rate: 1, playing: false, meta: null as NowPlayingMeta | null };
 
   const status = (over: Partial<EngineStatus> = {}): EngineStatus => ({
@@ -48,6 +50,9 @@ export function createFakeEngine() {
       calls.push(`rate ${rate}`);
       state.rate = rate;
     },
+    setLockScreenButtons(b) {
+      buttonCalls.push(`back=${b.back} forward=${b.forward}`);
+    },
     subscribe(l) {
       listeners.add(l);
       return () => listeners.delete(l);
@@ -60,5 +65,5 @@ export function createFakeEngine() {
     emit({ positionSec: 0, playing: false });
   };
   const applyStart = () => emit({ positionSec: state.pendingStart });
-  return { engine, calls, state, emit, reset, applyStart, fail: () => emit({ error: true, playing: false, loaded: false }) };
+  return { engine, calls, buttonCalls, state, emit, reset, applyStart, fail: () => emit({ error: true, playing: false, loaded: false }) };
 }

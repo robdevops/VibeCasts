@@ -12,7 +12,7 @@ import { useSettings } from '@/store/settings';
 
 const STEPS = [5, 10, 15, 20, 30, 45, 60, 90];
 
-type BoolKey = 'deleteOnFinish' | 'intelligentResume' | 'warnMobileData' | 'autoRestartSleepTimer' | 'cacheWholeEpisodes';
+type BoolKey = 'lockScreenSkipBack' | 'lockScreenSkipForward' | 'deleteOnFinish' | 'intelligentResume' | 'warnMobileData' | 'autoRestartSleepTimer' | 'cacheWholeEpisodes';
 
 async function sharePlaybackLog() {
   const text = playerLog.text() || 'No playback events recorded yet.';
@@ -72,8 +72,13 @@ export default function SettingsScreen() {
         {toggle('Auto restart sleep timer', 'If you resume within 5 minutes of the last pause, the sleep timer starts again.', s.autoRestartSleepTimer, 'autoRestartSleepTimer')}
         {toggle('Cache whole episodes', 'Download the whole episode as fast as possible while it plays, instead of keeping the radio awake to stream it. Saves battery; the temporary file is removed afterwards.', s.cacheWholeEpisodes, 'cacheWholeEpisodes')}
         {toggle('Delete episode when finished', 'Removes the downloaded file once you finish listening.', s.deleteOnFinish, 'deleteOnFinish')}
+        <ThemedText type="smallBold" themeColor="textSecondary" style={styles.section}>
+          BLUETOOTH AND LOCK SCREEN
+        </ThemedText>
+        {toggle('Skip back button', 'Show it on the lock screen and notification, and let the headset previous button use it.', s.lockScreenSkipBack, 'lockScreenSkipBack')}
+        {toggle('Skip forward button', 'Show it on the lock screen and notification, and let the headset next button use it.', s.lockScreenSkipForward, 'lockScreenSkipForward')}
         <ThemedText type="small" themeColor="textSecondary" style={styles.note}>
-          The lock-screen and headset buttons use a fixed 10 second skip set by the operating system.
+          Android sets what these buttons do: they always skip 10 seconds, and play/pause is always available. Changes apply to the next track or the next time controls appear.
         </ThemedText>
         <DownloadsSection />
         <LibrarySection />

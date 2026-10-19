@@ -24,6 +24,8 @@ export interface PlayerEngine {
   pause(): void;
   seekTo(sec: number): void;
   setRate(rate: number): void;
+  /** Which skip buttons the lock screen, notification and headset controls offer. */
+  setLockScreenButtons(buttons: { back: boolean; forward: boolean }): void;
   subscribe(listener: (s: EngineStatus) => void): () => void;
 }
 
@@ -57,6 +59,7 @@ export function createExpoEngine(): PlayerEngine {
   let applied = false;
   const listeners = new Set<(s: EngineStatus) => void>();
   let modeReady: Promise<void> | null = null;
+  let buttons = { back: true, forward: true };
 
   const configureAudio = () =>
     (modeReady ??= setAudioModeAsync({
@@ -74,7 +77,7 @@ export function createExpoEngine(): PlayerEngine {
       player.setActiveForLockScreen(
         true,
         { title: meta.title, artist: meta.artist, albumTitle: meta.artist, artworkUrl: meta.artworkUrl },
-        { showSeekForward: true, showSeekBackward: true },
+        { showSeekForward: buttons.forward, showSeekBackward: buttons.back },
       );
     } catch {
       // Lock-screen controls are a nicety; never let them break playback.
@@ -145,6 +148,12 @@ export function createExpoEngine(): PlayerEngine {
     setRate(rate) {
       pendingRate = rate;
       player?.setPlaybackRate(rate);
+    },
+    setLockScreenButtons(next) {
+      if (next.back === buttons.back && next.forward === buttons.forward) return;
+      buttons = next;
+      // Re-apply to a session that is already showing controls.
+      if (applied) activateLockScreen();
     },
     subscribe(listener) {
       listeners.add(listener);
