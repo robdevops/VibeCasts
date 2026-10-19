@@ -6,6 +6,7 @@ import { kv } from '@/db/kv';
 import type { KV } from '@/db/storage';
 import { emptyEpisodeState, episodeKey, isFinished } from '@/lib/episode-state';
 import { clampSeek, reachedSkipLast, startPosition } from '@/lib/player-math';
+import { fromRef, type EpisodeRef } from '@/lib/playlist';
 import { isLostPlace, isPlausibleAdvance, resumeFrom, shouldRestartSleep } from '@/lib/playback-rules';
 import { createFileEpisodeCache, type EpisodeCache } from '@/downloads/episode-cache';
 import { createExpoEngine, type EngineStatus, type PlayerEngine } from '@/player/engine';
@@ -13,6 +14,7 @@ import { playerLog, type EventLog } from '@/player/event-log';
 import { confirmStreaming } from '@/player/stream-guard';
 
 import { useLibrary } from './library';
+import { usePlaylists } from './playlists';
 import { useSettings } from './settings';
 import { useToast } from './toast';
 
@@ -57,6 +59,8 @@ type Deps = {
   cache: EpisodeCache;
   /** Rolling record of player events, for diagnosing failures after the fact. */
   log: EventLog;
+  /** The Up Next queue: auto-advance takes from it, and starting an episode removes it from it. */
+  queue: { take(): EpisodeRef | undefined; forget(key: string): void };
 };
 
 const STORAGE_KEY = 'player.v1';
@@ -76,6 +80,7 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
   const now = deps.now ?? Date.now;
   const cache = deps.cache;
   const log = deps.log ?? playerLog;
+  const queue = deps.queue ?? { take: () => usePlaylists.getState().takeNext(), forget: (k: string) => usePlaylists.getState().forget(k) };
   const appState =
     deps.appState ??
     ({
@@ -267,6 +272,8 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
       const key = keyOf();
       const { current } = get();
       if (!current || !key) return;
+      // "Stop at end of episode" means stop: don't roll on into the queue.
+      const stopAtEnd = get().sleep?.kind === 'episode';
       // Unload first so the status update from pausing is ignored rather than re-saved.
       loadedKey = null;
       expecting = null;
@@ -280,6 +287,13 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
       set({ playing: false, positionSec: 0, sleep: null });
       engine.pause();
       persist();
+      // Roll on into Up Next.
+      const next = stopAtEnd ? undefined : queue.take();
+      if (next) {
+        const { episode, podcast } = fromRef(next);
+        log.add('advance', { to: episode.id });
+        get().play(episode, podcast);
+      }
     };
 
     const checkSleep = () => {
@@ -474,6 +488,7 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
 
       play(episode, podcast) {
         const key = episodeKey(podcast.id, episode.id);
+        queue.forget(key); // playing it now takes it off the queue
         if (loadedKey === key && keyOf() === key) {
           if (!get().playing) resumeLoaded();
           return;

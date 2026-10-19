@@ -17,6 +17,7 @@ import { useBookmarks } from '@/store/bookmarks';
 import { useFeeds } from '@/store/feeds';
 import { useLibrary } from '@/store/library';
 import { usePlayer } from '@/store/player';
+import { usePlaylists } from '@/store/playlists';
 import { useSettings } from '@/store/settings';
 
 SplashScreen.preventAutoHideAsync();
@@ -35,6 +36,7 @@ export default function RootLayout() {
       if (d?.podcastId && d.episodeId) router.push({ pathname: '/episode', params: { podcastId: d.podcastId, episodeId: d.episodeId } });
     });
     void useDownloads.getState().hydrate();
+    void usePlaylists.getState().hydrate();
     // Settings first: the player restores with the saved playback speed.
     void useSettings.getState().hydrate().then(() => usePlayer.getState().hydrate());
     return () => tap.remove();
