@@ -7,7 +7,7 @@ import { Icon } from '@/components/ui/icon';
 import { useTheme } from '@/hooks/use-theme';
 import { durationLabel, episodeDateLabel } from '@/lib/episode-list';
 import { progressFraction, timeLeftLabel, type EpisodeState } from '@/lib/episode-state';
-import { stripHtml } from '@/lib/text';
+import { usePlayer } from '@/store/player';
 
 import { PlayRing } from './play-ring';
 
@@ -16,14 +16,15 @@ type Props = {
   state: EpisodeState | undefined;
   selecting: boolean;
   selected: boolean;
-  expanded: boolean;
   onPress: (e: Episode) => void;
   onLongPress: (e: Episode) => void;
   onPlay: (e: Episode) => void;
 };
 
-function EpisodeRowBase({ episode, state, selecting, selected, expanded, onPress, onLongPress, onPlay }: Props) {
+function EpisodeRowBase({ episode, state, selecting, selected, onPress, onLongPress, onPlay }: Props) {
   const theme = useTheme();
+  // True only while this exact episode is the one playing.
+  const playingNow = usePlayer((s) => s.playing && s.current?.episode.id === episode.id && s.current.podcast.id === episode.podcastId);
   const inProgress = !!state && state.progressMs > 0 && !state.played;
   const sub = inProgress ? timeLeftLabel(state, episode.durationSec) : durationLabel(episode.durationSec);
   return (
@@ -37,7 +38,7 @@ function EpisodeRowBase({ episode, state, selecting, selected, expanded, onPress
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={episode.title}
-        accessibilityState={{ selected, expanded }}
+        accessibilityState={{ selected }}
         onPress={() => onPress(episode)}
         onLongPress={() => onLongPress(episode)}
         delayLongPress={350}
@@ -52,7 +53,7 @@ function EpisodeRowBase({ episode, state, selecting, selected, expanded, onPress
           {episodeDateLabel(episode.published)}
           {state?.starred ? '  ★' : ''}
         </ThemedText>
-        <ThemedText type="smallBold" numberOfLines={expanded ? undefined : 3} style={styles.title}>
+        <ThemedText type="smallBold" numberOfLines={3} style={styles.title}>
           {episode.title}
         </ThemedText>
         {sub ? (
@@ -60,15 +61,11 @@ function EpisodeRowBase({ episode, state, selecting, selected, expanded, onPress
             {sub}
           </ThemedText>
         ) : null}
-        {expanded ? (
-          <ThemedText type="small" themeColor="textSecondary" style={styles.notes}>
-            {stripHtml(episode.description) || 'No description.'}
-          </ThemedText>
-        ) : null}
       </View>
       </Pressable>
       <PlayRing
-        label={`Play ${episode.title}`}
+        label={`${playingNow ? 'Pause' : 'Play'} ${episode.title}`}
+        playing={playingNow}
         progress={progressFraction(state, episode.durationSec)}
         played={!!state?.played}
         onPress={() => onPlay(episode)}
@@ -86,5 +83,4 @@ const styles = StyleSheet.create({
   text: { flex: 1, gap: 3 },
   date: { fontSize: 12, letterSpacing: 0.8 },
   title: { fontSize: 16, lineHeight: 22 },
-  notes: { marginTop: 6 },
 });

@@ -6,8 +6,11 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { ToastHost } from '@/components/ui/toast-host';
+import { useBookmarks } from '@/store/bookmarks';
 import { useFeeds } from '@/store/feeds';
 import { useLibrary } from '@/store/library';
+import { usePlayer } from '@/store/player';
+import { useSettings } from '@/store/settings';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -16,13 +19,18 @@ export default function RootLayout() {
   useEffect(() => {
     void useLibrary.getState().hydrate();
     void useFeeds.getState().hydrate();
+    void useBookmarks.getState().hydrate();
+    // Settings first: the player restores with the saved playback speed.
+    void useSettings.getState().hydrate().then(() => usePlayer.getState().hydrate());
   }, []);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <AnimatedSplashOverlay />
-        <Stack screenOptions={{ headerShown: false }} />
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="episode" options={{ presentation: 'modal', animation: 'slide_from_bottom', gestureEnabled: true }} />
+        </Stack>
         <ToastHost />
       </ThemeProvider>
     </GestureHandlerRootView>

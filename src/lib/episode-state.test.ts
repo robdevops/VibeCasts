@@ -7,6 +7,9 @@ it('detects finished episodes', () => {
   expect(isFinished(990_000, 1000)).toBe(true);
   expect(isFinished(500_000, 1000)).toBe(false);
   expect(isFinished(5, 0)).toBe(false);
+  // Short clips don't get the 15 s tail, only the 95% rule.
+  expect(isFinished(3500, 6)).toBe(false);
+  expect(isFinished(5800, 6)).toBe(true);
 });
 it('computes ring fraction', () => {
   expect(progressFraction(undefined, 100)).toBe(0);

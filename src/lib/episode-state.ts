@@ -21,7 +21,9 @@ const FINISH_TAIL_MS = 15_000;
 export function isFinished(progressMs: number, durationSec: number): boolean {
   if (durationSec <= 0) return false;
   const durationMs = durationSec * 1000;
-  return progressMs >= durationMs * 0.95 || durationMs - progressMs <= FINISH_TAIL_MS;
+  // The fixed tail only makes sense for real episodes; on a clip it would swallow most of it.
+  const tail = durationSec >= 120 ? FINISH_TAIL_MS : 0;
+  return progressMs >= durationMs * 0.95 || durationMs - progressMs <= tail;
 }
 
 /** 0..1 ring fill for an episode row. */
