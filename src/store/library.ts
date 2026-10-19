@@ -48,6 +48,7 @@ type Actions = {
   setFolderOrder(folderId: string, ids: string[]): void;
   renameFolder(folderId: string, name: string, color?: string): void;
   patchEpisode(episodeKey: string, patch: Partial<EpisodeState>): void;
+  patchEpisodes(podcastId: string, episodeIds: string[], patch: Partial<EpisodeState>): void;
   setOverride(podcastId: string, patch: Subscription['overrides']): void;
   setLayout(l: LibraryData['layout']): void;
   setSort(s: PodcastSort): void;
@@ -180,6 +181,17 @@ export function createLibraryStore(storage: KV = kv) {
       set((s) => ({
         episodes: { ...s.episodes, [key]: { ...(s.episodes[key] ?? emptyEpisodeState), ...patch } },
       }));
+    },
+
+    patchEpisodes(podcastId, ids, patch) {
+      set((s) => {
+        const episodes = { ...s.episodes };
+        for (const id of ids) {
+          const key = episodeKey(podcastId, id);
+          episodes[key] = { ...(episodes[key] ?? emptyEpisodeState), ...patch };
+        }
+        return { episodes };
+      });
     },
 
     setOverride(id, patch) {

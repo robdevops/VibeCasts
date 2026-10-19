@@ -74,10 +74,11 @@ export async function searchEpisodes(term: string, limit = 25): Promise<Episode[
 }
 
 /** Top podcasts chart, resolved to full podcast records (with feed URLs) via lookup. */
-export async function topPodcasts(country = 'us', limit = 20): Promise<Podcast[]> {
+export async function topPodcasts(country = 'us', limit = 20, genreId?: number): Promise<Podcast[]> {
+  const genre = genreId ? `/genre=${genreId}` : '';
   const chart = await getJson<{
     feed: { entry?: { id: { attributes: { 'im:id': string } } }[] };
-  }>(`${BASE}/${country}/rss/toppodcasts/limit=${limit}/json`);
+  }>(`${BASE}/${country}/rss/toppodcasts/limit=${limit}${genre}/json`);
   const ids = (chart.feed.entry ?? []).map((e) => e.id.attributes['im:id']);
   if (!ids.length) return [];
   const data = await getJson<{ results: ItunesPodcast[] }>(`${BASE}/lookup?id=${ids.join(',')}`);
@@ -89,3 +90,23 @@ export async function lookupPodcast(id: string): Promise<Podcast | null> {
   const data = await getJson<{ results: ItunesPodcast[] }>(`${BASE}/lookup?id=${id}`);
   return data.results[0] ? toPodcast(data.results[0]) : null;
 }
+
+/** iTunes podcast genre ids used for the Discovery category chips. */
+export const GENRES: { id: number; name: string }[] = [
+  { id: 1488, name: 'True Crime' },
+  { id: 1303, name: 'Comedy' },
+  { id: 1489, name: 'News' },
+  { id: 1324, name: 'Society & Culture' },
+  { id: 1321, name: 'Business' },
+  { id: 1318, name: 'Technology' },
+  { id: 1512, name: 'Health & Fitness' },
+  { id: 1304, name: 'Education' },
+  { id: 1487, name: 'History' },
+  { id: 1533, name: 'Science' },
+  { id: 1545, name: 'Sports' },
+  { id: 1309, name: 'TV & Film' },
+  { id: 1301, name: 'Arts' },
+  { id: 1310, name: 'Music' },
+  { id: 1305, name: 'Kids & Family' },
+  { id: 1483, name: 'Fiction' },
+];

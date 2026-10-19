@@ -14,13 +14,13 @@ export default function AppTabs() {
       <TabSlot style={{ flex: 1 }} />
       <TabList asChild>
         <View style={StyleSheet.flatten([styles.bar, { backgroundColor: colors.background, borderTopColor: colors.border }])}>
-          <TabTrigger name="index" href="/" asChild>
+          <TabTrigger name="(podcasts)" href="/" asChild>
             <TabButton>Podcasts</TabButton>
           </TabTrigger>
-          <TabTrigger name="playlists" href="/playlists" asChild>
+          <TabTrigger name="(playlists)" href="/playlists" asChild>
             <TabButton>Playlists</TabButton>
           </TabTrigger>
-          <TabTrigger name="discovery" href="/discovery" asChild>
+          <TabTrigger name="(discovery)" href="/discovery" asChild>
             <TabButton>Discovery</TabButton>
           </TabTrigger>
         </View>

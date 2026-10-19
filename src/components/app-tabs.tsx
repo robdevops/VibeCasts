@@ -13,17 +13,17 @@ export default function AppTabs() {
       indicatorColor={colors.accentSoft}
       tintColor={colors.accent}
       labelStyle={{ selected: { color: colors.accent } }}>
-      <NativeTabs.Trigger name="index">
+      <NativeTabs.Trigger name="(podcasts)">
         <NativeTabs.Trigger.Label>Podcasts</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="square.grid.2x2.fill" md="grid_view" />
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="playlists">
+      <NativeTabs.Trigger name="(playlists)">
         <NativeTabs.Trigger.Label>Playlists</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="list.bullet" md="format_list_bulleted" />
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="discovery">
+      <NativeTabs.Trigger name="(discovery)">
         <NativeTabs.Trigger.Label>Discovery</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="magnifyingglass" md="search" />
       </NativeTabs.Trigger>

@@ -13,11 +13,23 @@ export const STALE_MS = 30 * 60 * 1000;
 
 export type FeedEntry = { fetchedAt: number; total: number; episodes: Episode[] };
 
-type FeedData = { feeds: Record<string, FeedEntry> };
+/** Show details read from the feed itself. */
+export type FeedMeta = { description?: string; website?: string; category?: string; author?: string; artwork?: string };
+
+/** Whole feed, held in memory only for the current session. */
+export type FullFeed = { episodes: Episode[]; meta: FeedMeta };
+
+type FeedData = {
+  feeds: Record<string, FeedEntry>;
+  /** Podcasts seen in search/discovery, so a preview page can open from just an id. */
+  known: Record<string, Podcast>;
+};
 type Actions = {
   hydrated: boolean;
   loading: Record<string, true>;
+  full: Record<string, FullFeed>;
   hydrate(): Promise<void>;
+  remember(p: Podcast): void;
   refresh(podcast: Podcast): Promise<void>;
   refreshAll(podcasts: Podcast[], opts?: { onlyStale?: boolean }): Promise<void>;
 };
@@ -33,13 +45,23 @@ const defaultFetch: FetchText = async (url) => {
 export function createFeedStore(storage: KV = kv, fetchText: FetchText = defaultFetch) {
   const store = create<FeedData & Actions>()((set, get) => ({
     feeds: {},
+    known: {},
     loading: {},
+    full: {},
     hydrated: false,
+
+    remember(p) {
+      if (get().known[p.id]?.feedUrl === p.feedUrl && get().known[p.id]?.title === p.title) return;
+      set((s) => ({ known: { ...s.known, [p.id]: p } }));
+    },
 
     async hydrate() {
       try {
         const raw = await storage.getItem(STORAGE_KEY);
-        if (raw) set({ feeds: (JSON.parse(raw) as FeedData).feeds ?? {} });
+        if (raw) {
+          const data = JSON.parse(raw) as Partial<FeedData>;
+          set({ feeds: data.feeds ?? {}, known: data.known ?? {} });
+        }
       } catch {
         // Unreadable cache: refetch instead.
       }
@@ -59,6 +81,7 @@ export function createFeedStore(storage: KV = kv, fetchText: FetchText = default
             ...s.feeds,
             [podcast.id]: { fetchedAt: Date.now(), total: sorted.length, episodes: sorted.slice(0, MAX_CACHED) },
           },
+          full: { ...s.full, [podcast.id]: { episodes: sorted, meta: parsed.podcast } },
         }));
       } catch {
         // Keep whatever we had cached; the UI shows stale data rather than an error per tile.
@@ -81,10 +104,10 @@ export function createFeedStore(storage: KV = kv, fetchText: FetchText = default
 
   let timer: ReturnType<typeof setTimeout> | undefined;
   store.subscribe((s, prev) => {
-    if (!s.hydrated || s.feeds === prev.feeds) return;
+    if (!s.hydrated || (s.feeds === prev.feeds && s.known === prev.known)) return;
     clearTimeout(timer);
     timer = setTimeout(() => {
-      storage.setItem(STORAGE_KEY, JSON.stringify({ feeds: s.feeds })).catch(() => {});
+      storage.setItem(STORAGE_KEY, JSON.stringify({ feeds: s.feeds, known: s.known })).catch(() => {});
     }, 500);
   });
 
