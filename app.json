@@ -24,7 +24,10 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "org.robstevens.mobiletest"
+      "package": "org.robstevens.mobiletest",
+      "permissions": [
+        "WAKE_LOCK"
+      ]
     },
     "web": {
       "output": "server",

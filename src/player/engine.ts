@@ -35,6 +35,13 @@ export interface PlayerEngine {
 export const STATUS_INTERVAL_MS = 1000;
 
 /**
+ * Seconds of audio the player buffers ahead of the playhead. Streaming fills this in a burst and
+ * then lets the network idle, which cuts radio wake-ups and rides out short drops (e.g. while the
+ * phone has been locked for a while) without the audio stopping.
+ */
+export const FORWARD_BUFFER_SEC = 600;
+
+/**
  * Lock-screen controls on Android need a foreground media service that Expo Go's manifest does not
  * declare, so there they only work in a development/production build. (iOS Expo Go is fine.)
  */
@@ -81,7 +88,11 @@ export function createExpoEngine(): PlayerEngine {
 
   const ensurePlayer = () => {
     if (player) return player;
-    player = createAudioPlayer(null, { updateInterval: STATUS_INTERVAL_MS, keepAudioSessionActive: true });
+    player = createAudioPlayer(null, {
+      updateInterval: STATUS_INTERVAL_MS,
+      keepAudioSessionActive: true,
+      preferredForwardBufferDuration: FORWARD_BUFFER_SEC,
+    });
     player.addListener('playbackStatusUpdate', (s: AudioStatus) => {
       if (s.isLoaded && !applied) {
         // Seeking and rate changes issued before the source loads are dropped, so apply them now.

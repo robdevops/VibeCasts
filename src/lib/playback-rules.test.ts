@@ -1,4 +1,4 @@
-import { needsMobileDataWarning, resumeFrom, shouldRestartSleep } from './playback-rules';
+import { isPlausibleAdvance, needsMobileDataWarning, resumeFrom, shouldRestartSleep } from './playback-rules';
 
 describe('resumeFrom', () => {
   it('steps back two seconds when on', () => {
@@ -29,5 +29,28 @@ describe('needsMobileDataWarning', () => {
     expect(needsMobileDataWarning({ warn: false, onMobileData: true, streaming: true })).toBe(false);
     expect(needsMobileDataWarning({ warn: true, onMobileData: false, streaming: true })).toBe(false);
     expect(needsMobileDataWarning({ warn: true, onMobileData: true, streaming: false })).toBe(false);
+  });
+});
+
+describe('isPlausibleAdvance', () => {
+  it('accepts normal playback', () => {
+    expect(isPlausibleAdvance({ fromSec: 100, toSec: 101, wallSec: 1, rate: 1 })).toBe(true);
+    expect(isPlausibleAdvance({ fromSec: 100, toSec: 103, wallSec: 1, rate: 2 })).toBe(true);
+  });
+  it('accepts a long gap that matches the clock (JS was asleep while audio kept playing)', () => {
+    expect(isPlausibleAdvance({ fromSec: 1200, toSec: 1200 + 3600, wallSec: 3600, rate: 1 })).toBe(true);
+    expect(isPlausibleAdvance({ fromSec: 0, toSec: 7200, wallSec: 3600, rate: 2 })).toBe(true);
+  });
+  it('rejects running far ahead of the clock', () => {
+    expect(isPlausibleAdvance({ fromSec: 1200, toSec: 3000, wallSec: 5, rate: 1 })).toBe(false);
+    expect(isPlausibleAdvance({ fromSec: 1200, toSec: 1200 + 3600 * 2, wallSec: 3600, rate: 1 })).toBe(false);
+  });
+  it('accepts the lock-screen skip buttons (fixed 10 s jumps)', () => {
+    expect(isPlausibleAdvance({ fromSec: 500, toSec: 510, wallSec: 0, rate: 1 })).toBe(true);
+    expect(isPlausibleAdvance({ fromSec: 500, toSec: 490, wallSec: 0, rate: 1 })).toBe(true);
+  });
+  it('treats going backwards or standing still as fine', () => {
+    expect(isPlausibleAdvance({ fromSec: 500, toSec: 400, wallSec: 1, rate: 1 })).toBe(true);
+    expect(isPlausibleAdvance({ fromSec: 500, toSec: 500, wallSec: 10, rate: 1 })).toBe(true);
   });
 });

@@ -1,4 +1,3 @@
-import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Platform, StyleSheet, TextInput, View } from 'react-native';
 
@@ -72,11 +71,6 @@ export default function PodcastsScreen() {
     setMenu(null);
   };
 
-  const go = (path: '/downloads' | '/starred' | '/bookmarks' | '/history' | '/settings') => {
-    setMenu(null);
-    router.push(path);
-  };
-
   const mainItems: MenuItem[] = [
     { label: `Sort by: ${SORT_LABELS[sort]}`, icon: 'sort', onPress: () => setMenu('sort') },
     {
@@ -95,11 +89,6 @@ export default function PodcastsScreen() {
         void refresh();
       },
     },
-    { label: 'Downloads', icon: 'file-download', separator: true, onPress: () => go('/downloads') },
-    { label: 'Starred', icon: 'star-border', onPress: () => go('/starred') },
-    { label: 'Bookmarks', icon: 'bookmark-border', onPress: () => go('/bookmarks') },
-    { label: 'Listening history', icon: 'history', onPress: () => go('/history') },
-    { label: 'Settings', icon: 'settings', separator: true, onPress: () => go('/settings') },
   ];
 
   const sortItems: MenuItem[] = (Object.keys(SORT_LABELS) as PodcastSort[]).map((s) => ({

@@ -25,3 +25,15 @@ export function shouldRestartSleep(args: {
 export function needsMobileDataWarning(args: { warn: boolean; onMobileData: boolean; streaming: boolean }): boolean {
   return args.warn && args.onMobileData && args.streaming;
 }
+
+/**
+ * Is a new playback position believable? While playing, the position can't advance faster than the
+ * clock allows. A player that runs silently through the file (as can happen after the phone was
+ * locked for a while) reports a jump far beyond that, and it must not be trusted or saved.
+ */
+export function isPlausibleAdvance(args: { fromSec: number; toSec: number; wallSec: number; rate: number }): boolean {
+  const { fromSec, toSec, wallSec, rate } = args;
+  // The flat 12 s covers the OS lock-screen skip buttons (a fixed 10 s) and timing jitter.
+  const allowed = Math.max(0, wallSec) * Math.max(rate, 1) * 1.2 + 12;
+  return toSec - fromSec <= allowed;
+}
