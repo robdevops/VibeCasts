@@ -40,3 +40,7 @@ Node 24 (`.nvmrc`), Xcode (iOS Simulator), Android Studio (AVD). `npx expo start
 - Imported shows are `needsMeta`; `feeds.backfill` fetches their feed 3 at a time and `mergePodcastMeta` fills in artwork/author/title (banner on the Podcasts screen).
 - The persisted feed cache is slim (newest 50 episodes, no show notes); the full feed lives in memory. `TileGrid` mounts only rows near the viewport (`visibleRange`).
 - Feeds given as http are tried over https first (`feedCandidates`); the build allows cleartext (`expo-build-properties`, iOS ATS) for feeds and audio that only offer http.
+
+## Keeping your place, artwork, startup
+- `store/player.ts` only adopts a reported position once it is near where it asked the player to be (`expecting`); a fall back to 0:00 (`isLostPlace`) or a runaway reloads the source at the known position instead of seeking, and `saveProgress` refuses to write "back at the start" unless the user sought. `player/event-log.ts` keeps a rolling log (Settings > Troubleshooting > Share playback log).
+- `Artwork` asks the iTunes CDN for about the size shown (`lib/artwork.ts`), caches memory+disk, and the library's tile art is prefetched after first paint. The native splash stays up until the stores hydrate (the old animated overlay was removed).
