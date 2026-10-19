@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Podcasts",
+    "name": "VibeCasts",
     "slug": "scaf",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -9,7 +9,7 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon",
-      "bundleIdentifier": "org.robstevens.mobiletest",
+      "bundleIdentifier": "org.robstevens.vibecasts",
       "infoPlist": {
         "UIBackgroundModes": [
           "audio"
@@ -27,7 +27,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "org.robstevens.mobiletest",
+      "package": "org.robstevens.vibecasts",
       "permissions": [
         "WAKE_LOCK"
       ]
