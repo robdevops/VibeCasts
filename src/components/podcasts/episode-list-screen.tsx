@@ -61,7 +61,7 @@ export function EpisodeListScreen({
           return (
             <Pressable
               accessibilityRole="button"
-              onPress={() => router.push({ pathname: '/podcast/[id]', params: { id: episode.podcastId } })}
+              onPress={() => router.push({ pathname: '/(tabs)/(podcasts)/podcast/[id]', params: { id: episode.podcastId } })}
               style={({ pressed }) => [styles.row, { backgroundColor: pressed ? theme.backgroundElement : 'transparent' }]}>
               <Artwork uri={episode.artwork ?? podcast?.artwork} title={podcast?.title ?? episode.title} size={52} radius={8} />
               <View style={styles.text}>

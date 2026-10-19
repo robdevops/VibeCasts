@@ -60,3 +60,12 @@ describe('library store', () => {
     expect(b.getState().subscriptions['1']).toBeDefined();
   });
 });
+
+it('patches several episodes at once without touching others', () => {
+  const s = createLibraryStore(createMemoryKV());
+  s.getState().patchEpisode(episodeKey('1', 'keep'), { starred: true });
+  s.getState().patchEpisodes('1', ['a', 'b'], { played: true, progressMs: 0 });
+  expect(s.getState().episodes['1|a']).toMatchObject({ played: true });
+  expect(s.getState().episodes['1|b']).toMatchObject({ played: true });
+  expect(s.getState().episodes['1|keep']).toMatchObject({ starred: true, played: false });
+});

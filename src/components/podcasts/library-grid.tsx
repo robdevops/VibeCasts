@@ -37,8 +37,8 @@ export function LibraryGrid({ keys, folderId, layout, canReorder, refreshing, on
 
   const open = useCallback((item: GridItem) => {
     const { id } = parseKey(item.key);
-    if (item.kind === 'folder') router.push({ pathname: '/folder/[id]', params: { id } });
-    else router.push({ pathname: '/podcast/[id]', params: { id } });
+    if (item.kind === 'folder') router.push({ pathname: '/(tabs)/(podcasts)/folder/[id]', params: { id } });
+    else router.push({ pathname: '/(tabs)/(podcasts)/podcast/[id]', params: { id } });
   }, []);
 
   const onRemove = useCallback(

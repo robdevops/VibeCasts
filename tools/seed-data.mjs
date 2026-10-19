@@ -10,6 +10,21 @@ const art = (name, i) => {
   return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
 };
 
+const TITLES = [
+  'Schrödinger’s chat: can AI and scientists co-exist?',
+  'Who wants to be a millennial? Generation comeback',
+  'The trouble with trade deals',
+  'Why the oil price keeps surprising everyone',
+  'A very short history of the pencil',
+  'Inside the world’s quietest lab',
+];
+const episodes = (id, n) =>
+  Array.from({ length: n }, (_, k) => ({
+    id: `e${k}`, podcastId: id, title: TITLES[k % TITLES.length] + (k >= TITLES.length ? ` (part ${Math.floor(k / TITLES.length) + 1})` : ''),
+    description: '<p>A conversation about <b>big ideas</b> &amp; small details.</p><p>Hosted by someone you know.</p>',
+    audioUrl: 'x', published: 1_760_000_000_000 - k * 86_400_000 * 3, durationSec: 1200 + (k % 5) * 420,
+  }));
+
 export function seed({ unplayed = [99, 12, 3, 40, 7, 0, 20, 5, 1, 60] } = {}) {
   const subscriptions = {};
   const feeds = {};
@@ -21,14 +36,11 @@ export function seed({ unplayed = [99, 12, 3, 40, 7, 0, 20, 5, 1, 60] } = {}) {
       overrides: {},
       ...(i >= 5 && i <= 8 ? { folderId: i <= 6 ? 'fa' : 'fb' } : {}),
     };
-    feeds[id] = {
-      fetchedAt: Date.now(),
-      total: unplayed[i],
-      episodes: Array.from({ length: unplayed[i] }, (_, n) => ({
-        id: `e${n}`, podcastId: id, title: `Episode ${n}`, description: '', audioUrl: 'x', published: 1_760_000_000_000 - n * 86_400_000, durationSec: 1800,
-      })),
-    };
+    feeds[id] = { fetchedAt: Date.now(), total: unplayed[i], episodes: episodes(id, unplayed[i]) };
   });
+  // An unsubscribed show that was opened from Discovery (preview page).
+  const preview = { id: '200', title: 'Machine Gods', author: 'NPR', artwork: art('Machine Gods', 3), feedUrl: 'https://example.com/200.xml', category: 'Technology' };
+  feeds['200'] = { fetchedAt: Date.now(), total: 8, episodes: episodes('200', 8) };
   const library = {
     subscriptions,
     folders: {
@@ -37,9 +49,14 @@ export function seed({ unplayed = [99, 12, 3, 40, 7, 0, 20, 5, 1, 60] } = {}) {
     },
     homeOrder: ['f:fa', 'f:fb', 'p:100', 'p:101', 'p:102', 'p:103', 'p:104', 'p:109'],
     folderOrder: { fa: ['105', '106'], fb: ['107', '108'] },
-    episodes: {},
+    episodes: {
+      '100|e0': { progressMs: 900_000, played: false, starred: true, archived: false },
+      '100|e1': { progressMs: 0, played: true, starred: false, archived: false },
+      '100|e2': { progressMs: 0, played: false, starred: false, archived: true },
+      '100|e3': { progressMs: 1_620_000, played: false, starred: false, archived: false },
+    },
     layout: 'tiles',
     sort: 'custom',
   };
-  return { 'library.v1': JSON.stringify(library), 'feeds.v1': JSON.stringify({ feeds }) };
+  return { 'library.v1': JSON.stringify(library), 'feeds.v1': JSON.stringify({ feeds, known: { 200: preview } }) };
 }
