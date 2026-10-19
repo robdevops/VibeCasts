@@ -1,3 +1,4 @@
+import { AppState } from 'react-native';
 import { create } from 'zustand';
 
 import type { Episode, Podcast } from '@/api/types';
@@ -44,6 +45,8 @@ type Deps = {
   library: Pick<typeof useLibrary, 'getState'>;
   settings: Pick<typeof useSettings, 'getState'>;
   now: () => number;
+  /** Foreground/background signal. Faked in tests. */
+  appState: { isActive(): boolean; subscribe(onChange: (active: boolean) => void): () => void };
 };
 
 const STORAGE_KEY = 'player.v1';
@@ -56,9 +59,22 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
   const library = deps.library ?? useLibrary;
   const settings = deps.settings ?? useSettings;
   const now = deps.now ?? Date.now;
+  const appState =
+    deps.appState ??
+    ({
+      isActive: () => AppState.currentState === 'active',
+      subscribe: (onChange) => {
+        const sub = AppState.addEventListener('change', (s) => onChange(s === 'active'));
+        return () => sub.remove();
+      },
+    } satisfies Deps['appState']);
 
   let loadedKey: string | null = null;
   let lastSavedSec = 0;
+  // The true position and duration. The store's copies only follow these while the app is in the
+  // foreground, so a screen-off listen doesn't re-render the UI (and wake JS) for nothing.
+  let livePosition = 0;
+  let liveDuration = 0;
   let sleepTimer: ReturnType<typeof setTimeout> | undefined;
 
   const store = create<PlayerData & Actions>()((set, get) => {
@@ -68,20 +84,21 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
     };
 
     const persist = () => {
-      const { current, positionSec } = get();
+      const { current } = get();
       const write = current
-        ? storage.setItem(STORAGE_KEY, JSON.stringify({ podcast: current.podcast, episode: current.episode, positionSec }))
+        ? storage.setItem(STORAGE_KEY, JSON.stringify({ podcast: current.podcast, episode: current.episode, positionSec: livePosition }))
         : storage.removeItem(STORAGE_KEY);
       write.catch(() => {});
     };
 
     /** Write the position into the library; counts as played once near the end. */
     const saveProgress = () => {
-      const { current, positionSec, durationSec } = get();
+      const { current } = get();
+      const positionSec = livePosition;
       const key = keyOf();
       if (!current || !key) return;
       lastSavedSec = positionSec;
-      const dur = durationSec || current.episode.durationSec;
+      const dur = liveDuration || current.episode.durationSec;
       if (isFinished(positionSec * 1000, dur)) {
         library.getState().patchEpisode(key, { played: true, progressMs: 0, lastPlayed: now() });
       } else {
@@ -112,6 +129,7 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
       clearSleepTimer();
       library.getState().patchEpisode(key, { played: true, progressMs: 0, lastPlayed: now() });
       // Leave the episode selected but rewound, so pressing play again starts it over.
+      livePosition = 0;
       set({ playing: false, positionSec: 0, sleep: null });
       engine.pause();
       persist();
@@ -132,19 +150,27 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
         return;
       }
       const prevPlaying = get().playing;
-      set({
-        playing: s.playing,
-        buffering: s.buffering,
-        positionSec: s.loaded ? s.positionSec : get().positionSec,
-        durationSec: s.durationSec > 0 ? s.durationSec : get().durationSec,
-      });
+      if (s.loaded) livePosition = s.positionSec;
+      if (s.durationSec > 0) liveDuration = s.durationSec;
+      // Only publish the position to React while visible; state changes always go through.
+      const visible = appState.isActive();
+      const next: Partial<PlayerData> = {};
+      if (s.playing !== get().playing) next.playing = s.playing;
+      if (s.buffering !== get().buffering) next.buffering = s.buffering;
+      if (visible) {
+        if (livePosition !== get().positionSec) next.positionSec = livePosition;
+        const dur = liveDuration || get().durationSec;
+        if (dur !== get().durationSec) next.durationSec = dur;
+      }
+      // Skip the update entirely when nothing changed, so background ticks notify nobody.
+      if (Object.keys(next).length > 0) set(next);
       if (s.finished) {
         finish();
         return;
       }
       const c = get().current;
       const skipLast = c ? library.getState().subscriptions[c.podcast.id]?.overrides.skipLastSec ?? 0 : 0;
-      if (s.playing && reachedSkipLast(s.positionSec, get().durationSec, skipLast)) {
+      if (s.playing && reachedSkipLast(s.positionSec, liveDuration || get().durationSec, skipLast)) {
         finish();
         return;
       }
@@ -152,6 +178,11 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
       if ((prevPlaying && !s.playing) || (s.playing && Math.abs(s.positionSec - lastSavedSec) >= SAVE_EVERY_SEC)) {
         saveProgress();
       }
+    });
+
+    // Back in the foreground: catch the UI up to where playback got to while it wasn't watching.
+    appState.subscribe((active) => {
+      if (active && get().current) set({ positionSec: livePosition, durationSec: liveDuration || get().durationSec });
     });
 
     const load = (episode: Episode, podcast: Podcast, startSec: number) => {
@@ -165,6 +196,8 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
       });
       loadedKey = key;
       lastSavedSec = startSec;
+      livePosition = startSec;
+      liveDuration = episode.durationSec;
       set({
         current: { podcast, episode },
         positionSec: startSec,
@@ -190,6 +223,8 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
           if (raw) {
             const saved = JSON.parse(raw) as { podcast: Podcast; episode: Episode; positionSec: number };
             // Restored paused and not loaded: audio is fetched on first play.
+            livePosition = saved.positionSec;
+            liveDuration = saved.episode.durationSec;
             set({
               current: { podcast: saved.podcast, episode: saved.episode },
               positionSec: saved.positionSec,
@@ -231,7 +266,7 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
           // Restored from storage (or finished): load now, resuming from where it stopped.
           const key = episodeKey(current.podcast.id, current.episode.id);
           const state = library.getState().episodes[key] ?? emptyEpisodeState;
-          const start = get().positionSec > 0 ? get().positionSec : startPosition(state.progressMs, 0, current.episode.durationSec);
+          const start = livePosition > 0 ? livePosition : startPosition(state.progressMs, 0, current.episode.durationSec);
           load(current.episode, current.podcast, start);
           engine.play();
         }
@@ -245,13 +280,14 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
         const { current, durationSec } = get();
         if (!current) return;
         const target = clampSeek(sec, durationSec || current.episode.durationSec);
+        livePosition = target;
         set({ positionSec: target });
         if (loadedKey === keyOf()) engine.seekTo(target);
         saveProgress();
       },
 
       seekBy(delta) {
-        get().seekTo(get().positionSec + delta);
+        get().seekTo(livePosition + delta);
       },
       skipBack() {
         get().seekBy(-settings.getState().skipBackSec);
