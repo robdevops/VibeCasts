@@ -2,6 +2,7 @@ import { Platform, Pressable, ScrollView, Share, StyleSheet, Switch, View } from
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { DownloadsSection } from '@/components/settings/downloads-section';
 import { LibrarySection } from '@/components/settings/library-section';
 import { Icon } from '@/components/ui/icon';
 import { ScreenHeader } from '@/components/ui/screen-header';
@@ -74,6 +75,7 @@ export default function SettingsScreen() {
         <ThemedText type="small" themeColor="textSecondary" style={styles.note}>
           The lock-screen and headset buttons use a fixed 10 second skip set by the operating system.
         </ThemedText>
+        <DownloadsSection />
         <LibrarySection />
         <ThemedText type="smallBold" themeColor="textSecondary" style={styles.section}>
           TROUBLESHOOTING

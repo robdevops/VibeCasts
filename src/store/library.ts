@@ -71,6 +71,13 @@ type Actions = {
   setSort(s: PodcastSort): void;
 };
 
+/** Stamp the moment an episode becomes played (auto archive counts from it). */
+function withPlayedAt(prev: EpisodeState, patch: Partial<EpisodeState>): Partial<EpisodeState> {
+  if (patch.played === true && !prev.played && patch.playedAt === undefined) return { ...patch, playedAt: Date.now() };
+  if (patch.played === false) return { ...patch, playedAt: undefined };
+  return patch;
+}
+
 export const FOLDER_COLORS = ['#F5B63A', '#F28B3C', '#6CC24A', '#3AA0E8', '#5B6BE0', '#9B6BD6', '#8A8D93'];
 
 const initial: LibraryData = {
@@ -259,9 +266,10 @@ export function createLibraryStore(storage: KV = kv) {
     },
 
     patchEpisode(key, patch) {
-      set((s) => ({
-        episodes: { ...s.episodes, [key]: { ...(s.episodes[key] ?? emptyEpisodeState), ...patch } },
-      }));
+      set((s) => {
+        const prev = s.episodes[key] ?? emptyEpisodeState;
+        return { episodes: { ...s.episodes, [key]: { ...prev, ...withPlayedAt(prev, patch) } } };
+      });
     },
 
     patchEpisodes(podcastId, ids, patch) {
@@ -269,7 +277,8 @@ export function createLibraryStore(storage: KV = kv) {
         const episodes = { ...s.episodes };
         for (const id of ids) {
           const key = episodeKey(podcastId, id);
-          episodes[key] = { ...(episodes[key] ?? emptyEpisodeState), ...patch };
+          const prev = episodes[key] ?? emptyEpisodeState;
+          episodes[key] = { ...prev, ...withPlayedAt(prev, patch) };
         }
         return { episodes };
       });

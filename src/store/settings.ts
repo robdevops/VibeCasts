@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 import { kv } from '@/db/kv';
 import type { KV } from '@/db/storage';
+import type { ArchiveRule, NetworkRule } from '@/lib/downloads';
 
 export type SettingsData = {
   skipBackSec: number;
@@ -16,6 +17,16 @@ export type SettingsData = {
   autoRestartSleepTimer: boolean;
   /** Fetch the whole episode in one burst while streaming, then play from the file. */
   cacheWholeEpisodes: boolean;
+  /** Archive played episodes automatically (and delete their downloads). */
+  autoArchive: ArchiveRule;
+  /** Also auto-archive starred episodes. */
+  autoArchiveStarred: boolean;
+  /** Episodes kept downloaded per podcast with auto download on (1-10). */
+  autoDownloadLimit: number;
+  /** Only download automatically while charging. */
+  downloadOnlyCharging: boolean;
+  /** Which connections may download automatically. */
+  downloadNetwork: NetworkRule;
 };
 
 const defaults: SettingsData = {
@@ -27,6 +38,11 @@ const defaults: SettingsData = {
   warnMobileData: true,
   autoRestartSleepTimer: false,
   cacheWholeEpisodes: false,
+  autoArchive: 'never',
+  autoArchiveStarred: false,
+  autoDownloadLimit: 3,
+  downloadOnlyCharging: false,
+  downloadNetwork: 'wifi',
 };
 
 type Actions = { hydrated: boolean; hydrate(): Promise<void>; set(patch: Partial<SettingsData>): void };
@@ -65,6 +81,11 @@ export function createSettingsStore(storage: KV = kv) {
       warnMobileData: s.warnMobileData,
       autoRestartSleepTimer: s.autoRestartSleepTimer,
       cacheWholeEpisodes: s.cacheWholeEpisodes,
+      autoArchive: s.autoArchive,
+      autoArchiveStarred: s.autoArchiveStarred,
+      autoDownloadLimit: s.autoDownloadLimit,
+      downloadOnlyCharging: s.downloadOnlyCharging,
+      downloadNetwork: s.downloadNetwork,
     };
     storage.setItem(STORAGE_KEY, JSON.stringify(data)).catch(() => {});
   });
