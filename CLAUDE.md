@@ -1,4 +1,4 @@
-# mobiletest
+# VibeCasts (repo: mobiletest)
 
 Expo (SDK 57, to match the store build of Expo Go) + React Native + TypeScript + Expo Router app for experimenting with small app clones. Read `AGENTS.md` first: Expo APIs change every SDK, so check the versioned docs before touching them.
 
@@ -30,7 +30,7 @@ Node 24 (`.nvmrc`), Xcode (iOS Simulator), Android Studio (AVD). `npx expo start
 - Background audio and lock-screen/notification/Bluetooth controls come from `expo-audio`: `setAudioModeAsync({ shouldPlayInBackground: true, interruptionMode: 'doNotMix' })` plus `setActiveForLockScreen(...)`, and the `expo-audio` config plugin in `app.json` (iOS `UIBackgroundModes: audio`; Android media foreground service). The lock-screen skip buttons are a fixed 10 s set by the OS.
 - Battery: the native player pushes status to JS once a second (`STATUS_INTERVAL_MS`; fixed when the player is created). The store keeps a private live position for saving/skip-last/sleep and only publishes `positionSec` to React while `AppState` is active, then syncs once on resume. Keep it that way: every JS wake-up during a screen-off listen costs battery.
 - Android in **Expo Go** can't show lock-screen controls (its manifest has no media service), so `engine.ts` skips them there. Use a development build for the real thing: `npx eas-cli@latest build --profile development --platform android` (or `ios`), install it, then `npm run dev-client`.
-- `ios.bundleIdentifier` / `android.package` are `org.robstevens.mobiletest`: change them before the first store release.
+- `ios.bundleIdentifier` / `android.package` are `org.robstevens.vibecasts`: change them before the first store release.
 - Runaway protection: `store/player.ts` checks every reported position against the wall clock (`isPlausibleAdvance`). A player that races ahead silently (seen after a long screen-off) is paused and put back at the last good position, the bad position is never saved, and the episode is never marked played from it. Keep any new status handling behind that check.
 - `patches/expo-audio+57.0.5.patch` (applied by `postinstall: patch-package`) adds `setWakeMode(WAKE_MODE_NETWORK)` to the Android ExoPlayer, because expo-audio holds no wake/Wi-Fi lock and streaming could stall with the screen off. It needs `WAKE_LOCK` in `app.json`. If `expo-audio` is upgraded, regenerate the patch or drop it if upstream added a wake mode. Needs a native rebuild to take effect.
 - The player buffers `FORWARD_BUFFER_SEC` (10 min) ahead so short network drops and long screen-off periods don't interrupt audio.
