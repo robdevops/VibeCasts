@@ -53,3 +53,8 @@ Node 24 (`.nvmrc`), Xcode (iOS Simulator), Android Studio (AVD). `npx expo start
 ## New-episode notifications
 - Per-podcast toggle (podcast settings sheet) asks for permission, then `notifications/notifier.ts` compares each refreshed feed with the ids it has already seen (`lib/new-episodes.ts`; the first check only sets a baseline) and posts one local notification per podcast through `expo-notifications` (`notifications/platform.ts`, Android channel `new-episodes`). Tapping one opens the episode (listener in `app/_layout.tsx`).
 - Checks run after feed refreshes in the app and in the hourly background task (`downloads/background.ts`), so alerts can be late and arrive only when the OS runs the task; there is no push server. Needs a native rebuild (`expo-notifications`).
+
+## Playlists and Up Next
+- `store/playlists.ts` (`usePlaylists`): the Up Next queue plus named playlists, persisted under `playlists.v1`. Items are `EpisodeRef`s (`lib/playlist.ts`: slim episode + show, no notes) so they play without the feed. Pure list helpers (`addRefs`, `removeRef`, `moveRef`) are tested.
+- `store/player.ts` rolls on into Up Next when an episode finishes (not after "stop at end of episode"), and starting an episode removes it from the queue. Playing a playlist item queues the rest of the playlist.
+- UI: Playlists tab (`(playlists)/playlists.tsx`), `(playlists)/playlist/[id].tsx` (id `up-next` is the queue; move/remove with arrows), "Play next / Play last / Add to playlist…" on the episode menu and the podcast page's multi-select menu, and a queue button on the episode screen header.

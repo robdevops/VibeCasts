@@ -9,6 +9,9 @@ import { ThemedText } from '@/components/themed-text';
 import { Artwork } from '@/components/ui/artwork';
 import { Icon, type IconName } from '@/components/ui/icon';
 import { MenuSheet, type MenuItem } from '@/components/ui/menu-sheet';
+import { AddToPlaylistSheet } from '@/components/playlists/add-to-playlist-sheet';
+import { toRef } from '@/lib/playlist';
+import { usePlaylists } from '@/store/playlists';
 import { downloadsSupported, useDownloads } from '@/downloads/download-manager';
 import { durationLabel, episodeDateLabel } from '@/lib/episode-list';
 import { emptyEpisodeState, episodeKey } from '@/lib/episode-state';
@@ -68,6 +71,7 @@ export default function EpisodeScreen() {
   const [tab, setTab] = useState<Tab>(isCurrent ? 'playing' : 'details');
   const [sheet, setSheet] = useState<Sheet>(null);
   const [scrub, setScrub] = useState<number | null>(null);
+  const [playlistOpen, setPlaylistOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const tabList: Tab[] = isCurrent ? ['playing', 'details', 'bookmarks'] : ['details', 'bookmarks'];
 
@@ -114,6 +118,18 @@ export default function EpisodeScreen() {
     useToast.getState().show(`Bookmarked at ${formatClock(positionSec)}`);
   };
 
+  const openQueue = () => {
+    close();
+    router.push({ pathname: '/(tabs)/(playlists)/playlist/[id]', params: { id: 'up-next' } });
+  };
+
+  const queueIt = (where: 'first' | 'last') => {
+    const refs = [toRef(episode, podcast)];
+    if (where === 'first') usePlaylists.getState().playNext(refs);
+    else usePlaylists.getState().playLast(refs);
+    useToast.getState().show(where === 'first' ? 'Will play next' : 'Added to Up Next');
+  };
+
   const share = async () => {
     try {
       await Share.share({ message: `${episode.title} — ${podcast.title}${podcast.website ? `\n${podcast.website}` : ''}` });
@@ -126,6 +142,9 @@ export default function EpisodeScreen() {
     state.downloadedUri
       ? { label: 'Remove download', icon: 'delete-outline', onPress: () => useDownloads.getState().remove(podcast.id, episode.id) }
       : { label: downloading ? 'Downloading…' : 'Download', icon: 'file-download', disabled: !downloadsSupported || downloading, onPress: () => useDownloads.getState().download(episode, podcast) },
+    { label: 'Play next', icon: 'queue-music', onPress: () => queueIt('first') },
+    { label: 'Play last', icon: 'playlist-add-check', onPress: () => queueIt('last') },
+    { label: 'Add to playlist…', icon: 'playlist-add', onPress: () => setPlaylistOpen(true) },
     {
       label: 'Transcript',
       icon: 'subject',
@@ -149,7 +168,7 @@ export default function EpisodeScreen() {
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
-      <Header tab={tab} tabs={tabList} onTab={setTab} onClose={close} />
+      <Header tab={tab} tabs={tabList} onTab={setTab} onClose={close} onQueue={openQueue} />
 
       <SwipeTabs tabs={tabList} tab={tab} onTab={setTab}>
       {tab === 'playing' && isCurrent ? (
@@ -274,6 +293,7 @@ export default function EpisodeScreen() {
 
       <SpeedSheet visible={sheet === 'speed'} rate={rate} onChange={(r) => usePlayer.getState().setRate(r)} onClose={() => setSheet(null)} />
       <SleepSheet visible={sheet === 'sleep'} sleep={sleep} now={now} onChoose={(o) => usePlayer.getState().setSleep(o)} onClose={() => setSheet(null)} />
+      <AddToPlaylistSheet visible={playlistOpen} refs={[toRef(episode, podcast)]} onClose={() => setPlaylistOpen(false)} />
       <MenuSheet visible={sheet === 'menu'} items={menuItems} anchor="bottom" dark onClose={() => setSheet(null)} />
     </View>
   );
@@ -291,7 +311,7 @@ function goToPodcast(id: string) {
 
 const TAB_LABEL: Record<Tab, string> = { playing: 'Playing', details: 'Details', bookmarks: 'Bookmarks' };
 
-function Header({ tab, tabs, onTab, onClose }: { tab: Tab; tabs: Tab[]; onTab: (t: Tab) => void; onClose: () => void }) {
+function Header({ tab, tabs, onTab, onClose, onQueue }: { tab: Tab; tabs: Tab[]; onTab: (t: Tab) => void; onClose: () => void; onQueue?: () => void }) {
   return (
     <View style={styles.header}>
       <Pressable accessibilityRole="button" accessibilityLabel="Close player" onPress={onClose} hitSlop={10} style={styles.close}>
@@ -306,6 +326,11 @@ function Header({ tab, tabs, onTab, onClose }: { tab: Tab; tabs: Tab[]; onTab: (
           </Pressable>
         ))}
       </View>
+      {onQueue ? (
+        <Pressable accessibilityRole="button" accessibilityLabel="Up Next" onPress={onQueue} hitSlop={10} style={styles.queue}>
+          <Icon name="queue-music" size={26} color="#fff" />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -321,6 +346,7 @@ function BarButton({ name, label, text, active, onPress }: { name: IconName; lab
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: BG },
+  queue: { marginLeft: 'auto', paddingHorizontal: 8 },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, height: 56 },
   close: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   tabs: { flexDirection: 'row', gap: 4 },

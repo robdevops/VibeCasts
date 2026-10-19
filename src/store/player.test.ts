@@ -4,6 +4,8 @@ import { createFakeEpisodeCache } from '@/downloads/episode-cache';
 import { createEventLog } from '@/player/event-log';
 import { createFakeEngine } from '@/player/fake-engine';
 
+import { toRef, type EpisodeRef } from '@/lib/playlist';
+
 import { createLibraryStore, episodeKey } from './library';
 import { createPlayerStore } from './player';
 import { createSettingsStore } from './settings';
@@ -49,6 +51,7 @@ function setup(opts: { now?: () => number; active?: boolean; beforeStream?: (e: 
   library.getState().subscribe(podcast);
   const fakeCache = createFakeEpisodeCache();
   const log = createEventLog(createMemoryKV(), () => 1_000_000);
+  let upNext: EpisodeRef[] = [];
   // A controllable clock. `emit` advances it by the played distance, like real playback does;
   // `jump` reports a position without any time passing (what a runaway player looks like).
   let clockMs = 1_000_000;
@@ -71,8 +74,9 @@ function setup(opts: { now?: () => number; active?: boolean; beforeStream?: (e: 
     beforeStream: opts.beforeStream,
     cache: opts.cache ? fakeCache.cache : undefined,
     log,
+    queue: { take: () => upNext.shift(), forget: (k) => void (upNext = upNext.filter((r) => `${r.podcast.id}|${r.episode.id}` !== k)) },
   });
-  return { ...fake, log, emit, jump, advance: (ms: number) => (clockMs += ms), storage, library, settings, player, setActive: app.set, fakeCache };
+  return { ...fake, log, setQueue: (q: EpisodeRef[]) => (upNext = q), queueLeft: () => upNext, emit, jump, advance: (ms: number) => (clockMs += ms), storage, library, settings, player, setActive: app.set, fakeCache };
 }
 
 it('plays an episode, loading it with lock-screen metadata inputs and the saved rate', () => {
@@ -695,5 +699,48 @@ describe('lock-screen and headset buttons', () => {
     expect(t.buttonCalls).toContain('back=true forward=true');
     t.settings.getState().set({ lockScreenSkipForward: false });
     expect(t.buttonCalls).toContain('back=true forward=false');
+  });
+});
+
+describe('Up Next', () => {
+  const next: Episode = { id: 'n', podcastId: 'p', title: 'Next', description: '', audioUrl: 'https://a/n.mp3', published: 0, durationSec: 600 };
+
+  it('rolls on into the next queued episode when one ends', () => {
+    const t = setup();
+    t.setQueue([toRef(next, podcast)]);
+    t.player.getState().play(episode, podcast);
+    t.emit({ positionSec: 1795, playing: true });
+    t.emit({ positionSec: 1800, finished: true, playing: false });
+    expect(t.player.getState().current?.episode.id).toBe('n');
+    expect(t.calls.some((c) => c.startsWith('load https://a/n.mp3'))).toBe(true);
+    expect(t.queueLeft()).toEqual([]);
+    expect(t.library.getState().episodes[key]?.played).toBe(true);
+  });
+
+  it('does not roll on after "stop at end of episode"', () => {
+    const t = setup();
+    t.setQueue([toRef(next, podcast)]);
+    t.player.getState().play(episode, podcast);
+    t.player.getState().setSleep('episode');
+    t.emit({ positionSec: 1795, playing: true });
+    t.emit({ positionSec: 1800, finished: true, playing: false });
+    expect(t.player.getState().current?.episode.id).toBe('e');
+    expect(t.queueLeft()).toHaveLength(1);
+  });
+
+  it('starting a queued episode by hand takes it off the queue', () => {
+    const t = setup();
+    t.setQueue([toRef(next, podcast)]);
+    t.player.getState().play(next, podcast);
+    expect(t.queueLeft()).toEqual([]);
+  });
+
+  it('with an empty queue, finishing just stops', () => {
+    const t = setup();
+    t.player.getState().play(episode, podcast);
+    t.emit({ positionSec: 1795, playing: true });
+    t.emit({ positionSec: 1800, finished: true, playing: false });
+    expect(t.player.getState().current?.episode.id).toBe('e');
+    expect(t.player.getState().playing).toBe(false);
   });
 });
