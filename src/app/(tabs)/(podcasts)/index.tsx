@@ -3,6 +3,7 @@ import { Platform, StyleSheet, TextInput, View } from 'react-native';
 
 import { EmptyLibrary } from '@/components/podcasts/empty-library';
 import { LibraryGrid } from '@/components/podcasts/library-grid';
+import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconButton } from '@/components/ui/icon-button';
 import { MenuSheet, type MenuItem } from '@/components/ui/menu-sheet';
@@ -24,6 +25,7 @@ export default function PodcastsScreen() {
   const libraryReady = useLibrary((s) => s.hydrated);
   const feedsReady = useFeeds((s) => s.hydrated);
 
+  const progress = useFeeds((s) => s.backfillProgress);
   const [query, setQuery] = useState<string | null>(null);
   const [menu, setMenu] = useState<'main' | 'sort' | null>(null);
   const [newFolder, setNewFolder] = useState(false);
@@ -34,7 +36,12 @@ export default function PodcastsScreen() {
 
   // Fetch feeds that are missing or stale once storage has loaded, and when new shows are added.
   useEffect(() => {
-    if (libraryReady && feedsReady) void useFeeds.getState().refreshAll(podcasts, { onlyStale: true });
+    if (!libraryReady || !feedsReady) return;
+    // Shows imported from a file get their artwork and details first, then the rest refresh.
+    void useFeeds
+      .getState()
+      .backfill(podcasts)
+      .then(() => useFeeds.getState().refreshAll(podcasts.filter((p) => !p.needsMeta), { onlyStale: true }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [libraryReady, feedsReady, podcastIds]);
 
@@ -129,6 +136,13 @@ export default function PodcastsScreen() {
           }
         />
       )}
+      {progress ? (
+        <View style={[styles.banner, { backgroundColor: theme.accentSoft }]} accessibilityLiveRegion="polite">
+          <ThemedText type="small" style={{ color: theme.accent }}>
+            Loading artwork {Math.min(progress.done + 1, progress.total)}/{progress.total}
+          </ThemedText>
+        </View>
+      ) : null}
       <View style={styles.fill}>
         <LibraryGrid
           keys={keys}
@@ -163,6 +177,7 @@ export default function PodcastsScreen() {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  banner: { marginHorizontal: 16, marginBottom: 4, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 10 },
   search: {
     borderRadius: 20,
     paddingHorizontal: 16,

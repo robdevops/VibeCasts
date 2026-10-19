@@ -84,3 +84,8 @@ export function hostLabel(url: string): string {
     return url.replace(/^https?:\/\/(www\.)?/i, '').split(/[/?#]/)[0];
   }
 }
+
+/** URLs to try, in order. A plain http feed is tried over https first (most hosts redirect or support it). */
+export function feedCandidates(url: string): string[] {
+  return /^http:\/\//i.test(url) ? [url.replace(/^http:/i, 'https:'), url] : [url];
+}
