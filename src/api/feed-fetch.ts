@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 
-import { splitCredentials } from '@/lib/podcast-id';
+import { feedCandidates, splitCredentials } from '@/lib/podcast-id';
 
 export type FeedErrorKind = 'network' | 'auth' | 'http' | 'notfeed';
 
@@ -22,6 +22,19 @@ export const feedFetchUrl = (feedUrl: string) =>
 
 /** Fetch a feed's XML. Private links, tokens and `user:pass@` credentials are supported. */
 export async function fetchFeedText(feedUrl: string): Promise<string> {
+  const candidates = feedCandidates(feedUrl);
+  for (let i = 0; i < candidates.length; i++) {
+    try {
+      return await fetchOne(candidates[i]);
+    } catch (e) {
+      // Access problems are final; otherwise fall back to the next scheme.
+      if (i === candidates.length - 1 || (e instanceof FeedError && e.kind === 'auth')) throw e;
+    }
+  }
+  throw new FeedError("Couldn't reach the feed. Check your connection and try again.", 'network');
+}
+
+async function fetchOne(feedUrl: string): Promise<string> {
   const { url, authorization } = splitCredentials(feedUrl);
   // On web the proxy needs the credentials, so it gets the original URL and builds the header itself.
   const target = Platform.OS === 'web' ? feedFetchUrl(feedUrl) : url;

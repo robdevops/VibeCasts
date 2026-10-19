@@ -69,3 +69,52 @@ it('patches several episodes at once without touching others', () => {
   expect(s.getState().episodes['1|b']).toMatchObject({ played: true });
   expect(s.getState().episodes['1|keep']).toMatchObject({ starred: true, played: false });
 });
+
+describe('OPML import', () => {
+  const feed = (url: string, title = url, folder?: string) => ({ title, feedUrl: url, folder });
+
+  it('subscribes new feeds, files them in folders and skips ones already present', () => {
+    const s = createLibraryStore(createMemoryKV());
+    s.getState().subscribe(pod('1')); // https://f/1
+    const r = s.getState().importFeeds([
+      feed('http://f/1', 'Same show over http'),
+      feed('https://a.example/rss', 'A'),
+      feed('https://b.example/rss', 'B', 'News'),
+      feed('https://c.example/rss', 'C', 'news'),
+    ]);
+    expect(r).toEqual({ added: 3, existing: 1, folders: 1 });
+    const { subscriptions, folders, folderOrder, homeOrder } = s.getState();
+    expect(Object.keys(subscriptions)).toHaveLength(4);
+    const news = Object.values(folders)[0];
+    expect(news.name).toBe('News');
+    expect(folderOrder[news.id]).toHaveLength(2);
+    expect(homeOrder).toHaveLength(3); // pod 1, A, the folder
+    expect(Object.values(subscriptions).filter((x) => x.podcast.needsMeta)).toHaveLength(3);
+  });
+
+  it('is idempotent', () => {
+    const s = createLibraryStore(createMemoryKV());
+    const list = [feed('https://a.example/rss'), feed('https://b.example/rss', 'B', 'X')];
+    s.getState().importFeeds(list);
+    const again = s.getState().importFeeds(list);
+    expect(again).toEqual({ added: 0, existing: 2, folders: 0 });
+    expect(s.getState().homeOrder).toHaveLength(2);
+  });
+
+  it('subscribe ignores a show whose feed is already imported', () => {
+    const s = createLibraryStore(createMemoryKV());
+    s.getState().importFeeds([feed('https://f/9', 'Nine')]);
+    s.getState().subscribe({ ...pod('999'), feedUrl: 'http://F/9' });
+    expect(Object.keys(s.getState().subscriptions)).toHaveLength(1);
+  });
+
+  it('fills in details from the feed once, then clears needsMeta', () => {
+    const s = createLibraryStore(createMemoryKV());
+    s.getState().importFeeds([feed('https://a.example/rss', 'From file')]);
+    const id = Object.keys(s.getState().subscriptions)[0];
+    s.getState().mergePodcastMeta(id, { title: 'Real title', author: 'Au', artwork: 'https://art/x.jpg', category: 'News' });
+    expect(s.getState().subscriptions[id].podcast).toMatchObject({ title: 'Real title', author: 'Au', artwork: 'https://art/x.jpg', needsMeta: false });
+    s.getState().mergePodcastMeta(id, { title: 'Renamed later' });
+    expect(s.getState().subscriptions[id].podcast.title).toBe('Real title');
+  });
+});

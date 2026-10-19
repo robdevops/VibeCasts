@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "scaf",
+    "name": "Podcasts",
     "slug": "scaf",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -13,7 +13,10 @@
       "infoPlist": {
         "UIBackgroundModes": [
           "audio"
-        ]
+        ],
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
       }
     },
     "android": {
@@ -41,6 +44,14 @@
           "enableBackgroundPlayback": true,
           "microphonePermission": false,
           "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
         }
       ],
       [

@@ -44,7 +44,7 @@ it('keeps the whole feed in memory but caches only the newest episodes', async (
   const s = createFeedStore(createMemoryKV(), jest.fn().mockResolvedValue(xml));
   await s.getState().refresh(pod);
   expect(s.getState().full['1'].episodes).toHaveLength(130);
-  expect(s.getState().feeds['1'].episodes).toHaveLength(100);
+  expect(s.getState().feeds['1'].episodes).toHaveLength(50);
   expect(s.getState().feeds['1'].total).toBe(130);
   expect(s.getState().full['1'].meta.description).toBe('D');
 });
@@ -61,4 +61,38 @@ it('remembers discovered podcasts and persists them', async () => {
   const b = createFeedStore(storage, jest.fn());
   await b.getState().hydrate();
   expect(b.getState().known['1']).toMatchObject({ title: 'P' });
+});
+
+it('persists a slim cache without show notes', async () => {
+  jest.useFakeTimers();
+  const storage = createMemoryKV();
+  const s = createFeedStore(storage, jest.fn().mockResolvedValue(sampleFeed));
+  await s.getState().hydrate();
+  await s.getState().refresh(pod);
+  expect(s.getState().feeds['1'].episodes.some((e) => e.description)).toBe(true);
+  jest.advanceTimersByTime(1000);
+  jest.useRealTimers();
+  await Promise.resolve();
+  const saved = JSON.parse((await storage.getItem('feeds.v1')) ?? '{}');
+  expect(saved.feeds['1'].episodes).toHaveLength(3);
+  expect(saved.feeds['1'].episodes.some((e: { description?: string }) => e.description)).toBe(false);
+});
+
+it('backfills imported shows 3 at a time and clears needsMeta through onMeta', async () => {
+  let running = 0;
+  let peak = 0;
+  const fetchText = jest.fn(async () => {
+    peak = Math.max(peak, ++running);
+    await new Promise((r) => setTimeout(r, 5));
+    running--;
+    return sampleFeed;
+  });
+  const onMeta = jest.fn();
+  const s = createFeedStore(createMemoryKV(), fetchText, onMeta);
+  const pods = Array.from({ length: 7 }, (_, i) => ({ ...pod, id: `r${i}`, feedUrl: `https://f/${i}`, needsMeta: true }));
+  await s.getState().backfill([...pods, { ...pod, id: 'done' }]);
+  expect(fetchText).toHaveBeenCalledTimes(7);
+  expect(peak).toBe(3);
+  expect(onMeta).toHaveBeenCalledTimes(7);
+  expect(s.getState().backfillProgress).toBeNull();
 });
