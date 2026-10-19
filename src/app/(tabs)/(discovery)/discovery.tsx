@@ -2,11 +2,11 @@ import { useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { GENRES, feedFetchUrl, lookupPodcast, searchEpisodes, searchPodcasts, topPodcasts } from '@/api/itunes';
-import { parseFeed } from '@/api/rss';
+import { FeedError } from '@/api/feed-fetch';
+import { GENRES, lookupPodcast, searchEpisodes, searchPodcasts, topPodcasts } from '@/api/itunes';
 import type { Episode, Podcast } from '@/api/types';
 import { FeaturedCarousel } from '@/components/discovery/featured-carousel';
-import { EpisodeResultRow, PodcastResultRow, SubscribeButton } from '@/components/discovery/result-rows';
+import { EpisodeResultRow, PodcastResultRow } from '@/components/discovery/result-rows';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Artwork } from '@/components/ui/artwork';
@@ -14,26 +14,16 @@ import { Icon } from '@/components/ui/icon';
 import { useAsync, useDebounced } from '@/hooks/use-async';
 import { useTheme } from '@/hooks/use-theme';
 import { openDiscoveredPodcast } from '@/lib/open-podcast';
-import { isFeedUrl, rssPodcastId } from '@/lib/podcast-id';
+import { addFeedFromUrl } from '@/lib/add-feed';
+import { hostLabel, toFeedUrl } from '@/lib/podcast-id';
 import { useFeeds } from '@/store/feeds';
 
 type Tab = 'podcasts' | 'episodes';
 
-async function loadRssPreview(url: string): Promise<Podcast> {
-  const res = await fetch(feedFetchUrl(url.trim()));
-  if (!res.ok) throw new Error(`The feed returned ${res.status}`);
-  const parsed = parseFeed(await res.text());
-  return {
-    id: rssPodcastId(url),
-    title: parsed.podcast.title || url,
-    author: parsed.podcast.author,
-    artwork: parsed.podcast.artwork,
-    feedUrl: url.trim(),
-    category: parsed.podcast.category,
-    description: parsed.podcast.description,
-    website: parsed.podcast.website,
-  };
-}
+type AddState =
+  | { url: string; status: 'adding' }
+  | { url: string; status: 'added' | 'existing'; podcast: Podcast }
+  | { url: string; status: 'error'; message: string };
 
 export default function DiscoveryScreen() {
   const theme = useTheme();
@@ -44,8 +34,24 @@ export default function DiscoveryScreen() {
   const [showAll, setShowAll] = useState(false);
 
   const term = useDebounced(query.trim(), 350);
-  const searching = term.length > 0;
-  const feedMode = searching && isFeedUrl(term);
+  // A feed address is added, never searched for. Use the live text (not the debounced term) so a
+  // pasted URL doesn't trigger a search while the debounce catches up.
+  const feedUrl = toFeedUrl(query);
+  const feedMode = feedUrl !== null;
+  const searching = !feedMode && term.length > 0 && toFeedUrl(term) === null;
+  const [addState, setAddState] = useState<AddState | null>(null);
+  const add = addState && addState.url === feedUrl ? addState : null;
+
+  const submitFeed = async () => {
+    if (!feedUrl || add?.status === 'adding') return;
+    setAddState({ url: feedUrl, status: 'adding' });
+    try {
+      const r = await addFeedFromUrl(feedUrl);
+      setAddState({ url: feedUrl, status: r.status, podcast: r.podcast });
+    } catch (e) {
+      setAddState({ url: feedUrl, status: 'error', message: e instanceof FeedError ? e.message : "Couldn't add this podcast." });
+    }
+  };
 
   const featured = useAsync('featured', () => topPodcasts('us', 7));
   const trending = useAsync(`trending-${genre ?? 'all'}`, () => topPodcasts('us', 20, genre));
@@ -55,7 +61,6 @@ export default function DiscoveryScreen() {
   const episodeResults = useAsync(`se-${searching && !feedMode && tab === 'episodes' ? term : ''}`, () =>
     searching && !feedMode && tab === 'episodes' ? searchEpisodes(term) : Promise.resolve([] as Episode[]),
   );
-  const rss = useAsync(`rss-${feedMode ? term : ''}`, () => (feedMode ? loadRssPreview(term) : Promise.resolve(null)));
 
   const openEpisodeShow = async (e: Episode) => {
     const known = useFeeds.getState().known[e.podcastId];
@@ -75,7 +80,8 @@ export default function DiscoveryScreen() {
         placeholderTextColor={theme.textSecondary}
         autoCapitalize="none"
         autoCorrect={false}
-        returnKeyType="search"
+        returnKeyType={feedMode ? 'go' : 'search'}
+        onSubmitEditing={() => void submitFeed()}
         accessibilityLabel="Search podcasts or add RSS URL"
         style={[styles.input, { color: theme.text }, Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : null]}
       />
@@ -141,28 +147,55 @@ export default function DiscoveryScreen() {
         </>
       ) : feedMode ? (
         <View style={styles.pad}>
-          {rss.loading ? (
-            <ActivityIndicator color={theme.accent} />
-          ) : rss.error || !rss.data ? (
-            <ThemedText themeColor="textSecondary" style={styles.center}>
-              That doesn&apos;t look like a podcast feed{rss.error ? `: ${rss.error.message}` : ''}.
-            </ThemedText>
-          ) : (
+          {add?.status === 'adding' ? (
+            <View style={styles.addRow}>
+              <ActivityIndicator color={theme.accent} />
+              <ThemedText themeColor="textSecondary">Adding podcast…</ThemedText>
+            </View>
+          ) : add?.status === 'added' || add?.status === 'existing' ? (
             <View style={styles.rssCard}>
-              <Artwork uri={rss.data.artwork} title={rss.data.title} size={96} radius={12} />
+              <Artwork uri={add.podcast.artwork} title={add.podcast.title} size={96} radius={12} />
               <View style={{ flex: 1, gap: 4 }}>
-                <ThemedText type="smallBold" numberOfLines={2}>{rss.data.title}</ThemedText>
-                <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>{rss.data.author}</ThemedText>
+                <ThemedText type="smallBold" themeColor="success">
+                  {add.status === 'added' ? 'Added to your library' : 'Already in your library'}
+                </ThemedText>
+                <ThemedText type="smallBold" numberOfLines={2}>{add.podcast.title}</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>{add.podcast.author}</ThemedText>
                 <View style={styles.rssActions}>
                   <Pressable
                     accessibilityRole="button"
-                    onPress={() => openDiscoveredPodcast(rss.data as Podcast)}
+                    onPress={() => openDiscoveredPodcast(add.podcast)}
                     style={[styles.open, { borderColor: theme.border }]}>
                     <ThemedText type="smallBold">Open</ThemedText>
                   </Pressable>
-                  <SubscribeButton podcast={rss.data} />
+                  <Pressable accessibilityRole="button" onPress={() => setQuery('')} hitSlop={8}>
+                    <ThemedText type="smallBold" themeColor="textSecondary">Add another</ThemedText>
+                  </Pressable>
                 </View>
               </View>
+            </View>
+          ) : (
+            <View style={styles.addCol}>
+              <Icon name="rss-feed" size={40} color={theme.accent} />
+              <ThemedText type="subtitle" style={styles.center}>Add this podcast feed</ThemedText>
+              {/* Only the domain is shown: private links carry secret tokens in the path or query. */}
+              <ThemedText themeColor="textSecondary" style={styles.center}>
+                {hostLabel(feedUrl)}
+              </ThemedText>
+              {add?.status === 'error' ? (
+                <ThemedText themeColor="accent" style={styles.center} accessibilityLiveRegion="polite">
+                  {add.message}
+                </ThemedText>
+              ) : null}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={add?.status === 'error' ? 'Try again' : 'Add podcast'}
+                onPress={() => void submitFeed()}
+                style={[styles.addButton, { backgroundColor: theme.accent }]}>
+                <ThemedText type="smallBold" style={{ color: '#fff' }}>
+                  {add?.status === 'error' ? 'Try again' : 'Add podcast'}
+                </ThemedText>
+              </Pressable>
             </View>
           )}
         </View>
@@ -222,6 +255,9 @@ const styles = StyleSheet.create({
   pad: { padding: 24 },
   center: { textAlign: 'center' },
   rssCard: { flexDirection: 'row', gap: 16, alignItems: 'center' },
+  addRow: { flexDirection: 'row', gap: 12, alignItems: 'center', justifyContent: 'center' },
+  addCol: { alignItems: 'center', gap: 12 },
+  addButton: { borderRadius: 24, paddingHorizontal: 28, paddingVertical: 12, minWidth: 180, alignItems: 'center', marginTop: 4 },
   rssActions: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 6 },
   open: { borderWidth: 1.5, borderRadius: 18, paddingHorizontal: 18, paddingVertical: 8 },
 });

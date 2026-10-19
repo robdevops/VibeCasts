@@ -1,12 +1,6 @@
-import { Platform } from 'react-native';
-
 import type { Episode, Podcast } from './types';
 
 const BASE = 'https://itunes.apple.com';
-
-/** Web can't fetch most feeds (CORS), so route them through our API route. */
-export const feedFetchUrl = (feedUrl: string) =>
-  Platform.OS === 'web' ? `/api/feed?url=${encodeURIComponent(feedUrl)}` : feedUrl;
 
 type ItunesPodcast = {
   collectionId: number;

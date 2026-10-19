@@ -1,11 +1,49 @@
-/** True for a pasted http(s) feed address (ignoring surrounding whitespace). */
-export function isFeedUrl(input: string): boolean {
-  const s = input.trim();
-  if (!/^https?:\/\/\S+$/i.test(s)) return false;
+const PODCAST_SCHEMES = /^(?:feed|pcast|itpc|podcast):(?:\/\/)?/i;
+
+/**
+ * Turn whatever the user typed or pasted into a fetchable feed URL, or `null` if it isn't one.
+ *
+ * Accepts any http(s) URL with a host: private subscriber links with tokens, query strings, ports,
+ * IP addresses and single-label intranet names. Podcast-app schemes (`feed://`, `pcast://`,
+ * `itpc://`, `feed:https://...`) are mapped to http(s). Surrounding whitespace is dropped; nothing
+ * else about the URL is changed (tokens are case-sensitive).
+ */
+export function toFeedUrl(input: string): string | null {
+  let s = input.trim();
+  if (!s || /\s/.test(s)) return null;
+  if (PODCAST_SCHEMES.test(s)) {
+    const rest = s.replace(PODCAST_SCHEMES, '');
+    s = /^https?:\/\//i.test(rest) ? rest : `http://${rest}`;
+  }
+  if (!/^https?:\/\/[^/?#]+/i.test(s)) return null;
   try {
-    return !!new URL(s).hostname.includes('.') || new URL(s).hostname === 'localhost';
+    return new URL(s).hostname ? s : null;
   } catch {
-    return false;
+    return null;
+  }
+}
+
+/** True when the text is a feed address (and so should be added, not searched for). */
+export const isFeedUrl = (input: string): boolean => toFeedUrl(input) !== null;
+
+/**
+ * Split `user:pass@host` credentials out of a URL: fetch refuses URLs that carry them, so they
+ * travel as a Basic Authorization header instead. The returned URL is safe to fetch and display.
+ */
+export function splitCredentials(url: string): { url: string; authorization?: string } {
+  try {
+    const u = new URL(url);
+    if (!u.username && !u.password) return { url };
+    const user = decodeURIComponent(u.username);
+    const pass = decodeURIComponent(u.password);
+    u.username = '';
+    u.password = '';
+    const raw = `${user}:${pass}`;
+    // btoa wants Latin-1, so UTF-8 encode first.
+    const b64 = btoa(unescape(encodeURIComponent(raw)));
+    return { url: u.toString(), authorization: `Basic ${b64}` };
+  } catch {
+    return { url };
   }
 }
 
@@ -19,10 +57,30 @@ function hash(s: string): string {
   return (h >>> 0).toString(16).padStart(8, '0');
 }
 
+/** Lowercase scheme and host only: paths and query strings (and so private tokens) are case-sensitive. */
+function canonical(feedUrl: string): string {
+  const s = feedUrl.trim();
+  try {
+    const u = new URL(s);
+    return `${u.protocol}//${u.host.toLowerCase()}${u.pathname.replace(/\/+$/, '')}${u.search}${u.hash}`;
+  } catch {
+    return s.replace(/\/+$/, '');
+  }
+}
+
 /**
- * Id for a show that only has a feed URL. Never the raw URL: ids end up in route params and
- * in `podcastId|episodeId` keys, so they must not contain `|`, `/` or `?`.
+ * Id for a show that only has a feed URL. Never the raw URL: ids end up in route params and in
+ * `podcastId|episodeId` keys, so they must not contain `|`, `/` or `?`.
  */
 export function rssPodcastId(feedUrl: string): string {
-  return `rss-${hash(feedUrl.trim().replace(/\/+$/, '').toLowerCase())}`;
+  return `rss-${hash(canonical(feedUrl))}`;
+}
+
+/** "https://www.example.com/path?token=x" -> "example.com". Never reveals the path or query. */
+export function hostLabel(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./i, '');
+  } catch {
+    return url.replace(/^https?:\/\/(www\.)?/i, '').split(/[/?#]/)[0];
+  }
 }

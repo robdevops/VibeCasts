@@ -33,6 +33,15 @@ export function progressFraction(state: EpisodeState | undefined, durationSec: n
   return Math.min(1, Math.max(0, state.progressMs / (durationSec * 1000)));
 }
 
+/**
+ * Fill of the ring around an episode's play button: a full ring when unplayed that shrinks as you
+ * listen, so it shows the time that remains. Played episodes show a check instead (0).
+ */
+export function remainingFraction(state: EpisodeState | undefined, durationSec: number): number {
+  if (state?.played) return 0;
+  return 1 - progressFraction(state, durationSec);
+}
+
 export function timeLeftLabel(state: EpisodeState | undefined, durationSec: number): string {
   const leftSec = Math.max(0, durationSec - Math.floor((state?.progressMs ?? 0) / 1000));
   const m = Math.round(leftSec / 60);

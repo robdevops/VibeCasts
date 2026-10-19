@@ -6,7 +6,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Icon } from '@/components/ui/icon';
 import { useTheme } from '@/hooks/use-theme';
 import { durationLabel, episodeDateLabel } from '@/lib/episode-list';
-import { progressFraction, timeLeftLabel, type EpisodeState } from '@/lib/episode-state';
+import { remainingFraction, timeLeftLabel, type EpisodeState } from '@/lib/episode-state';
 import { usePlayer } from '@/store/player';
 
 import { PlayRing } from './play-ring';
@@ -66,7 +66,7 @@ function EpisodeRowBase({ episode, state, selecting, selected, onPress, onLongPr
       <PlayRing
         label={`${playingNow ? 'Pause' : 'Play'} ${episode.title}`}
         playing={playingNow}
-        progress={progressFraction(state, episode.durationSec)}
+        remaining={remainingFraction(state, episode.durationSec)}
         played={!!state?.played}
         onPress={() => onPlay(episode)}
       />

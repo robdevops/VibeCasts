@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 
-import { feedFetchUrl } from '@/api/itunes';
+import { fetchFeedText } from '@/api/feed-fetch';
 import { parseFeed } from '@/api/rss';
-import type { Episode, Podcast } from '@/api/types';
+import type { Episode, ParsedFeed, Podcast } from '@/api/types';
 import { kv } from '@/db/kv';
 import type { KV } from '@/db/storage';
 
@@ -30,19 +30,15 @@ type Actions = {
   full: Record<string, FullFeed>;
   hydrate(): Promise<void>;
   remember(p: Podcast): void;
+  /** Store an already-parsed feed (used when the feed was just fetched for another reason). */
+  ingest(podcast: Podcast, parsed: ParsedFeed): void;
   refresh(podcast: Podcast): Promise<void>;
   refreshAll(podcasts: Podcast[], opts?: { onlyStale?: boolean }): Promise<void>;
 };
 
 export type FetchText = (url: string) => Promise<string>;
 
-const defaultFetch: FetchText = async (url) => {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Feed request failed (${res.status})`);
-  return res.text();
-};
-
-export function createFeedStore(storage: KV = kv, fetchText: FetchText = defaultFetch) {
+export function createFeedStore(storage: KV = kv, fetchText: FetchText = fetchFeedText) {
   const store = create<FeedData & Actions>()((set, get) => ({
     feeds: {},
     known: {},
@@ -68,21 +64,24 @@ export function createFeedStore(storage: KV = kv, fetchText: FetchText = default
       set({ hydrated: true });
     },
 
+    ingest(podcast, parsed) {
+      const sorted = parsed.episodes
+        .map((e) => ({ ...e, podcastId: podcast.id }))
+        .sort((a, b) => b.published - a.published);
+      set((s) => ({
+        feeds: {
+          ...s.feeds,
+          [podcast.id]: { fetchedAt: Date.now(), total: sorted.length, episodes: sorted.slice(0, MAX_CACHED) },
+        },
+        full: { ...s.full, [podcast.id]: { episodes: sorted, meta: parsed.podcast } },
+      }));
+    },
+
     async refresh(podcast) {
       if (!podcast.feedUrl || get().loading[podcast.id]) return;
       set((s) => ({ loading: { ...s.loading, [podcast.id]: true } }));
       try {
-        const parsed = parseFeed(await fetchText(feedFetchUrl(podcast.feedUrl)));
-        const sorted = parsed.episodes
-          .map((e) => ({ ...e, podcastId: podcast.id }))
-          .sort((a, b) => b.published - a.published);
-        set((s) => ({
-          feeds: {
-            ...s.feeds,
-            [podcast.id]: { fetchedAt: Date.now(), total: sorted.length, episodes: sorted.slice(0, MAX_CACHED) },
-          },
-          full: { ...s.full, [podcast.id]: { episodes: sorted, meta: parsed.podcast } },
-        }));
+        get().ingest(podcast, parseFeed(await fetchText(podcast.feedUrl)));
       } catch {
         // Keep whatever we had cached; the UI shows stale data rather than an error per tile.
       } finally {

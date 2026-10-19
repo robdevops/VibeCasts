@@ -31,6 +31,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { episodeCounts, visibleEpisodes, type EpisodeSort } from '@/lib/episode-list';
 import { episodeKey } from '@/lib/episode-state';
 import { capabilitiesFor } from '@/lib/podcast-capabilities';
+import { hostLabel } from '@/lib/podcast-id';
 import { toggleEpisode } from '@/player';
 import { useFeeds } from '@/store/feeds';
 import { useLibrary } from '@/store/library';
@@ -40,7 +41,7 @@ import { BookmarkList } from './bookmark-list';
 import { EpisodeRow } from './episode-row';
 import { SettingsSheet } from './settings-sheet';
 
-type Menu = 'overflow' | 'folder' | 'selection' | null;
+type Menu = 'overflow' | 'gear' | 'folder' | 'selection' | null;
 
 export default function PodcastScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -140,6 +141,8 @@ export default function PodcastScreen() {
   const unsubscribe = async () => {
     if (!podcast) return;
     if (await confirmAsync('Unsubscribe?', `Remove ${podcast.title} from your library? Your progress will be kept.`, 'Unsubscribe')) {
+      // Remember the show first so this page keeps showing it (as an unsubscribed preview).
+      useFeeds.getState().remember(podcast);
       lib.unsubscribe(id);
     }
   };
@@ -157,10 +160,15 @@ export default function PodcastScreen() {
     { label: sort === 'newest' ? 'Sort: oldest first' : 'Sort: newest first', icon: 'sort', onPress: () => setSort(sort === 'newest' ? 'oldest' : 'newest') },
     { label: 'Mark all as played', icon: 'done-all', onPress: () => void markAllPlayed() },
     { label: 'Download all (coming soon)', icon: 'file-download', disabled: true, onPress: () => {} },
-    { label: 'Notifications', icon: 'notifications-none', separator: true, checked: !!overrides.notifications, disabled: !caps.notifications, onPress: () => lib.setOverride(id, { notifications: !overrides.notifications }) },
-    { label: 'Auto download', icon: 'cloud-download', checked: !!overrides.autoDownload, disabled: !caps.autoDownload, onPress: () => lib.setOverride(id, { autoDownload: !overrides.autoDownload }) },
-    { label: 'Skip first / last seconds…', icon: 'fast-forward', disabled: !caps.skipSettings, onPress: () => setSettingsOpen(true) },
-    { label: 'Unsubscribe', icon: 'remove-circle-outline', destructive: true, separator: true, disabled: !caps.unsubscribe, onPress: () => void unsubscribe() },
+  ]);
+
+  // The gear menu: subscription and everything that belongs to a subscription.
+  const gearItems = closing([
+    subscribed
+      ? { label: 'Unsubscribe', icon: 'remove-circle-outline', destructive: true, onPress: () => void unsubscribe() }
+      : { label: 'Subscribe', icon: 'add-circle-outline', onPress: subscribe },
+    { label: 'Folder…', icon: 'folder-open', separator: true, disabled: !caps.folder, onPress: () => setMenu('folder') },
+    { label: 'Podcast settings…', icon: 'settings', disabled: !caps.skipSettings, onPress: () => setSettingsOpen(true) },
   ]);
 
   const folderItems = closing([
@@ -196,19 +204,6 @@ export default function PodcastScreen() {
   const category = podcast.category ?? full?.meta.category;
   const description = podcast.description ?? full?.meta.description;
 
-  const roundButton = (name: IconName, label: string, onPressFn: () => void, opts: { enabled: boolean; active?: boolean }) => (
-    <Pressable
-      key={label}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ disabled: !opts.enabled, selected: opts.active }}
-      disabled={!opts.enabled}
-      onPress={onPressFn}
-      style={[styles.round, { backgroundColor: theme.backgroundElement, opacity: opts.enabled ? 1 : 0.35 }]}>
-      <Icon name={name} size={24} color={opts.active ? theme.accent : theme.textSecondary} />
-    </Pressable>
-  );
-
   const header = (
     <View>
       <View style={[styles.hero, { paddingTop: insets.top + 64 }]}>
@@ -241,30 +236,16 @@ export default function PodcastScreen() {
           </ThemedText>
         ) : null}
 
-        <View style={styles.actions}>
-          {subscribed ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Subscribed. Tap to unsubscribe"
-              onPress={() => void unsubscribe()}
-              style={[styles.round, { backgroundColor: theme.success }]}>
-              <Icon name="check" size={26} color="#fff" />
-            </Pressable>
-          ) : (
-            <Pressable accessibilityRole="button" accessibilityLabel="Subscribe" onPress={subscribe} style={[styles.subscribe, { backgroundColor: theme.accent }]}>
-              <Icon name="add" size={22} color="#fff" />
-              <ThemedText type="smallBold" style={{ color: '#fff' }}>
-                Subscribe
-              </ThemedText>
-            </Pressable>
-          )}
-          {roundButton('folder-open', 'Choose folder', () => setMenu('folder'), { enabled: caps.folder, active: !!sub?.folderId })}
-          {roundButton(overrides.notifications ? 'notifications-active' : 'notifications-none', 'Toggle notifications', () => lib.setOverride(id, { notifications: !overrides.notifications }), { enabled: caps.notifications, active: !!overrides.notifications })}
-          {roundButton('settings', 'Podcast settings', () => setSettingsOpen(true), { enabled: caps.skipSettings })}
-        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Podcast menu"
+          onPress={() => setMenu('gear')}
+          style={[styles.round, { backgroundColor: theme.backgroundElement, marginTop: 8 }]}>
+          <Icon name="settings" size={24} color={theme.textSecondary} />
+        </Pressable>
         {!subscribed ? (
           <ThemedText type="small" themeColor="textSecondary" style={styles.centerText}>
-            Subscribe to unlock folders, notifications and per-podcast settings.
+            Not subscribed. Open the menu to subscribe.
           </ThemedText>
         ) : null}
       </View>
@@ -289,7 +270,7 @@ export default function PodcastScreen() {
               <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(website)} style={styles.meta}>
                 <Icon name="language" size={18} color={theme.badge} />
                 <ThemedText type="small" style={{ color: theme.badge }} numberOfLines={1}>
-                  {website.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}
+                  {hostLabel(website)}
                 </ThemedText>
               </Pressable>
             ) : null}
@@ -413,6 +394,7 @@ export default function PodcastScreen() {
       )}
 
       <MenuSheet visible={menu === 'overflow'} items={overflowItems} onClose={() => setMenu(null)} />
+      <MenuSheet visible={menu === 'gear'} items={gearItems} onClose={() => setMenu(null)} />
       <MenuSheet visible={menu === 'folder'} items={folderItems} title="Folder" onClose={() => setMenu(null)} />
       <MenuSheet visible={menu === 'selection'} items={selectionItems} onClose={() => setMenu(null)} />
       <SettingsSheet
