@@ -9,16 +9,19 @@ const STROKE = 2.5;
 const R = (SIZE - STROKE) / 2;
 const CIRC = 2 * Math.PI * R;
 
-/** Play button with a progress arc around it; becomes a green check once the episode is finished. */
+/**
+ * Play button with a ring that starts full and shrinks as you listen (time remaining); becomes a
+ * green check once the episode is finished.
+ */
 export function PlayRing({
-  progress,
+  remaining,
   played,
   playing = false,
   onPress,
   label,
 }: {
-  /** 0..1 */
-  progress: number;
+  /** 0..1 fraction of the episode still to play. */
+  remaining: number;
   played: boolean;
   /** Show a pause glyph (this episode is playing right now). */
   playing?: boolean;
@@ -27,7 +30,7 @@ export function PlayRing({
 }) {
   const theme = useTheme();
   const color = played ? theme.success : theme.accent;
-  const arc = Math.min(1, Math.max(0, progress));
+  const arc = Math.min(1, Math.max(0, remaining));
   return (
     <Pressable
       accessibilityRole="button"
@@ -40,7 +43,7 @@ export function PlayRing({
           <Circle cx={SIZE / 2} cy={SIZE / 2} r={SIZE / 2} fill={theme.success} />
         ) : (
           <>
-            <Circle cx={SIZE / 2} cy={SIZE / 2} r={R} stroke={color} strokeOpacity={arc > 0 ? 0.25 : 1} strokeWidth={STROKE} fill="none" />
+            <Circle cx={SIZE / 2} cy={SIZE / 2} r={R} stroke={color} strokeOpacity={0.25} strokeWidth={STROKE} fill="none" />
             {arc > 0 ? (
               <Circle
                 cx={SIZE / 2}

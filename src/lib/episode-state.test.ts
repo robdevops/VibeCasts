@@ -1,4 +1,4 @@
-import { isFinished, progressFraction, timeLeftLabel, unplayedCount } from './episode-state';
+import { isFinished, progressFraction, remainingFraction, timeLeftLabel, unplayedCount } from './episode-state';
 
 const base = { progressMs: 0, played: false, starred: false, archived: false };
 
@@ -29,4 +29,12 @@ it('counts unplayed, skipping played and archived', () => {
     'p|c': { ...base, progressMs: 10 },
   };
   expect(unplayedCount('p', eps, states)).toBe(2);
+});
+
+it('ring shows the time remaining: full when unplayed, shrinking, empty once played', () => {
+  expect(remainingFraction(undefined, 100)).toBe(1);
+  expect(remainingFraction({ ...base, progressMs: 25_000 }, 100)).toBe(0.75);
+  expect(remainingFraction({ ...base, progressMs: 100_000 }, 100)).toBe(0);
+  expect(remainingFraction({ ...base, played: true }, 100)).toBe(0);
+  expect(remainingFraction({ ...base, progressMs: 5 }, 0)).toBe(1);
 });
