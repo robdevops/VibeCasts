@@ -6,7 +6,8 @@ import { ThemedText } from '@/components/themed-text';
 import { Icon } from '@/components/ui/icon';
 import { useTheme } from '@/hooks/use-theme';
 import { durationLabel, episodeDateLabel } from '@/lib/episode-list';
-import { remainingFraction, timeLeftLabel, type EpisodeState } from '@/lib/episode-state';
+import { episodeKey, remainingFraction, timeLeftLabel, type EpisodeState } from '@/lib/episode-state';
+import { useDownloads } from '@/downloads/download-manager';
 import { usePlayer } from '@/store/player';
 
 import { PlayRing } from './play-ring';
@@ -25,6 +26,7 @@ function EpisodeRowBase({ episode, state, selecting, selected, onPress, onLongPr
   const theme = useTheme();
   // True only while this exact episode is the one playing.
   const playingNow = usePlayer((s) => s.playing && s.current?.episode.id === episode.id && s.current.podcast.id === episode.podcastId);
+  const downloading = useDownloads((s) => !!s.active[episodeKey(episode.podcastId, episode.id)]);
   const inProgress = !!state && state.progressMs > 0 && !state.played;
   const sub = inProgress ? timeLeftLabel(state, episode.durationSec) : durationLabel(episode.durationSec);
   return (
@@ -52,6 +54,7 @@ function EpisodeRowBase({ episode, state, selecting, selected, onPress, onLongPr
         <ThemedText type="smallBold" themeColor="textSecondary" style={styles.date}>
           {episodeDateLabel(episode.published)}
           {state?.starred ? '  ★' : ''}
+          {state?.downloadedUri ? '  ⬇' : downloading ? '  …' : ''}
         </ThemedText>
         <ThemedText type="smallBold" numberOfLines={3} style={styles.title}>
           {episode.title}

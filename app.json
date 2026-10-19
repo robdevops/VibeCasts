@@ -46,6 +46,7 @@
           "recordAudioAndroid": false
         }
       ],
+      "expo-background-task",
       [
         "expo-build-properties",
         {

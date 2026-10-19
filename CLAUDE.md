@@ -44,3 +44,8 @@ Node 24 (`.nvmrc`), Xcode (iOS Simulator), Android Studio (AVD). `npx expo start
 ## Keeping your place, artwork, startup
 - `store/player.ts` only adopts a reported position once it is near where it asked the player to be (`expecting`); a fall back to 0:00 (`isLostPlace`) or a runaway reloads the source at the known position instead of seeking, and `saveProgress` refuses to write "back at the start" unless the user sought. `player/event-log.ts` keeps a rolling log (Settings > Troubleshooting > Share playback log).
 - `Artwork` asks the iTunes CDN for about the size shown (`lib/artwork.ts`), caches memory+disk, and the library's tile art is prefetched after first paint. The native splash stays up until the stores hydrate (the old animated overlay was removed).
+
+## Downloads
+- `downloads/download-manager.ts` (`useDownloads`): queue (2 at a time) over `expo-file-system` into `Paths.document/downloads`; sets `downloadedUri`/`autoDownloaded` on the library episode state and keeps a small `entries` record for the Downloads screen. Undefined file system on web (`downloadsSupported`).
+- Pure rules live in `lib/downloads.ts` (`shouldAutoArchive`, `planAutoDownloads`, `downloadAllowed`); `downloads/auto.ts` applies them (foreground, feed refresh, an episode becoming played, setting changes; not on every progress save, to avoid wake-ups while listening). `downloads/background.ts` registers an hourly `expo-background-task` (OS-scheduled, best effort). Conditions come from `expo-battery` and `@react-native-community/netinfo` (`downloads/conditions.ts`).
+- Native modules added for this: netinfo, expo-battery, expo-background-task, expo-task-manager. Needs a rebuild.

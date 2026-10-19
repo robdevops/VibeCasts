@@ -4,6 +4,12 @@ export type EpisodeState = {
   starred: boolean;
   archived: boolean;
   downloadedUri?: string;
+  /** When the download finished, epoch ms. */
+  downloadedAt?: number;
+  /** Fetched by auto download (so it may rotate off), as opposed to chosen by the user. */
+  autoDownloaded?: boolean;
+  /** When the episode became played, epoch ms (drives auto archive). */
+  playedAt?: number;
   /** Last time the user listened, epoch ms (drives listening history). */
   lastPlayed?: number;
 };

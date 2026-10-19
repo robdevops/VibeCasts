@@ -33,6 +33,7 @@ import { episodeKey } from '@/lib/episode-state';
 import { capabilitiesFor } from '@/lib/podcast-capabilities';
 import { hostLabel } from '@/lib/podcast-id';
 import { toggleEpisode } from '@/player';
+import { downloadsSupported, useDownloads } from '@/downloads/download-manager';
 import { useFeeds } from '@/store/feeds';
 import { useLibrary } from '@/store/library';
 import { useToast } from '@/store/toast';
@@ -153,13 +154,31 @@ export default function PodcastScreen() {
     }
   };
 
+  const downloadNewest = () => {
+    if (!podcast) return;
+    const todo = episodes.filter((e) => !states[episodeKey(id, e.id)]?.played && !states[episodeKey(id, e.id)]?.archived).slice(0, 10);
+    for (const e of todo) useDownloads.getState().download(e, podcast);
+    useToast.getState().show(todo.length ? `Downloading ${todo.length} episode${todo.length === 1 ? '' : 's'}` : 'Nothing unplayed to download');
+  };
+
+  const selectedEpisodes = episodes.filter((e) => selected.has(e.id));
+  const allSelectedDownloaded = selectedEpisodes.length > 0 && selectedEpisodes.every((e) => !!states[episodeKey(id, e.id)]?.downloadedUri);
+  const downloadSelected = () => {
+    if (!podcast) return;
+    for (const e of selectedEpisodes) {
+      if (allSelectedDownloaded) useDownloads.getState().remove(id, e.id);
+      else useDownloads.getState().download(e, podcast);
+    }
+    setSelected(new Set());
+  };
+
   const closing = (items: MenuItem[]) => items.map((i) => ({ ...i, onPress: () => { setMenu(null); i.onPress(); } }));
 
   const overrides = sub?.overrides ?? {};
   const overflowItems = closing([
     { label: sort === 'newest' ? 'Sort: oldest first' : 'Sort: newest first', icon: 'sort', onPress: () => setSort(sort === 'newest' ? 'oldest' : 'newest') },
     { label: 'Mark all as played', icon: 'done-all', onPress: () => void markAllPlayed() },
-    { label: 'Download all (coming soon)', icon: 'file-download', disabled: true, onPress: () => {} },
+    { label: 'Download newest 10 unplayed', icon: 'file-download', disabled: !downloadsSupported || !podcast, onPress: downloadNewest },
   ]);
 
   // The gear menu: subscription and everything that belongs to a subscription.
@@ -184,7 +203,7 @@ export default function PodcastScreen() {
 
   const selectionItems = closing([
     { label: 'Select all', icon: 'select-all', onPress: () => setSelected(new Set(shown.map((e) => e.id))) },
-    { label: 'Download (coming soon)', icon: 'file-download', disabled: true, onPress: () => {} },
+    { label: allSelectedDownloaded ? 'Remove downloads' : 'Download', icon: 'file-download', disabled: !downloadsSupported, onPress: downloadSelected },
     { label: 'Add to playlist (coming soon)', icon: 'playlist-add', disabled: true, onPress: () => {} },
   ]);
 
