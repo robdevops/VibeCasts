@@ -1,4 +1,5 @@
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import * as Notifications from 'expo-notifications';
+import { DarkTheme, DefaultTheme, router, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
@@ -8,6 +9,8 @@ import { ToastHost } from '@/components/ui/toast-host';
 import { startDownloadAutomation } from '@/downloads/auto';
 import { registerAutoDownloadTask } from '@/downloads/background';
 import { useDownloads } from '@/downloads/download-manager';
+import { startNewEpisodeNotifications } from '@/notifications';
+import { configureNotifications } from '@/notifications/platform';
 import { prefetchTileArtwork } from '@/lib/prefetch-artwork';
 import { playerLog } from '@/player/event-log';
 import { useBookmarks } from '@/store/bookmarks';
@@ -25,9 +28,16 @@ export default function RootLayout() {
     void useFeeds.getState().hydrate();
     void useBookmarks.getState().hydrate();
     void playerLog.hydrate();
+    configureNotifications();
+    // Tapping a new-episode notification opens that episode.
+    const tap = Notifications.addNotificationResponseReceivedListener((r) => {
+      const d = r.notification.request.content.data as { podcastId?: string; episodeId?: string } | undefined;
+      if (d?.podcastId && d.episodeId) router.push({ pathname: '/episode', params: { podcastId: d.podcastId, episodeId: d.episodeId } });
+    });
     void useDownloads.getState().hydrate();
     // Settings first: the player restores with the saved playback speed.
     void useSettings.getState().hydrate().then(() => usePlayer.getState().hydrate());
+    return () => tap.remove();
   }, []);
 
   // Keep the native splash up until the saved library has loaded, then show the app (never longer than 3 s).
@@ -39,7 +49,12 @@ export default function RootLayout() {
   useEffect(() => {
     if (!ready) return;
     void registerAutoDownloadTask();
-    return startDownloadAutomation();
+    const stopDownloads = startDownloadAutomation();
+    const stopNotifications = startNewEpisodeNotifications();
+    return () => {
+      stopDownloads();
+      stopNotifications();
+    };
   }, [ready]);
 
   useEffect(() => {
