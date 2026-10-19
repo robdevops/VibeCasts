@@ -33,6 +33,9 @@ import { episodeKey } from '@/lib/episode-state';
 import { capabilitiesFor } from '@/lib/podcast-capabilities';
 import { hostLabel } from '@/lib/podcast-id';
 import { toggleEpisode } from '@/player';
+import { AddToPlaylistSheet } from '@/components/playlists/add-to-playlist-sheet';
+import { toRef, type EpisodeRef } from '@/lib/playlist';
+import { usePlaylists } from '@/store/playlists';
 import { requestNotificationPermission } from '@/notifications/platform';
 import { downloadsSupported, useDownloads } from '@/downloads/download-manager';
 import { useFeeds } from '@/store/feeds';
@@ -83,6 +86,7 @@ export default function PodcastScreen() {
   const [aboutOpen, setAboutOpen] = useState(false);
   const [menu, setMenu] = useState<Menu>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [playlistOpen, setPlaylistOpen] = useState(false);
   const [newFolder, setNewFolder] = useState(false);
 
   const selecting = selected.size > 0;
@@ -173,6 +177,15 @@ export default function PodcastScreen() {
     setSelected(new Set());
   };
 
+  const selectedRefs = (): EpisodeRef[] => (podcast ? selectedEpisodes.map((e) => toRef(e, podcast)) : []);
+  const queueSelected = (where: 'first' | 'last') => {
+    const refs = selectedRefs();
+    if (where === 'first') usePlaylists.getState().playNext(refs);
+    else usePlaylists.getState().playLast(refs);
+    useToast.getState().show(`${refs.length} episode${refs.length === 1 ? '' : 's'} ${where === 'first' ? 'will play next' : 'added to Up Next'}`);
+    setSelected(new Set());
+  };
+
   const closing = (items: MenuItem[]) => items.map((i) => ({ ...i, onPress: () => { setMenu(null); i.onPress(); } }));
 
   const overrides = sub?.overrides ?? {};
@@ -205,7 +218,9 @@ export default function PodcastScreen() {
   const selectionItems = closing([
     { label: 'Select all', icon: 'select-all', onPress: () => setSelected(new Set(shown.map((e) => e.id))) },
     { label: allSelectedDownloaded ? 'Remove downloads' : 'Download', icon: 'file-download', disabled: !downloadsSupported, onPress: downloadSelected },
-    { label: 'Add to playlist (coming soon)', icon: 'playlist-add', disabled: true, onPress: () => {} },
+    { label: 'Play next', icon: 'queue-music', disabled: !podcast, onPress: () => queueSelected('first') },
+    { label: 'Play last', icon: 'playlist-add-check', disabled: !podcast, onPress: () => queueSelected('last') },
+    { label: 'Add to playlist…', icon: 'playlist-add', disabled: !podcast, onPress: () => setPlaylistOpen(true) },
   ]);
 
   if (!podcast) {
@@ -417,6 +432,14 @@ export default function PodcastScreen() {
       <MenuSheet visible={menu === 'gear'} items={gearItems} onClose={() => setMenu(null)} />
       <MenuSheet visible={menu === 'folder'} items={folderItems} title="Folder" onClose={() => setMenu(null)} />
       <MenuSheet visible={menu === 'selection'} items={selectionItems} onClose={() => setMenu(null)} />
+      <AddToPlaylistSheet
+        visible={playlistOpen}
+        refs={selectedRefs()}
+        onClose={() => {
+          setPlaylistOpen(false);
+          setSelected(new Set());
+        }}
+      />
       <SettingsSheet
         visible={settingsOpen}
         title={podcast.title}
