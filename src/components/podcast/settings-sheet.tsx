@@ -29,7 +29,7 @@ export function SettingsSheet({ visible, title, overrides, onChange, onClose }: 
           These override the app-wide defaults for this podcast.
         </ThemedText>
 
-        <ToggleRow label="Notifications" value={!!overrides.notifications} onChange={(v) => onChange({ notifications: v })} />
+        <ToggleRow label="Notify me about new episodes" value={!!overrides.notifications} onChange={(v) => onChange({ notifications: v })} />
         <ToggleRow label="Auto download new episodes" value={!!overrides.autoDownload} onChange={(v) => onChange({ autoDownload: v })} />
         <StepperRow label="Skip first" value={overrides.skipFirstSec ?? 0} onChange={(v) => onChange({ skipFirstSec: v })} />
         <StepperRow label="Skip last" value={overrides.skipLastSec ?? 0} onChange={(v) => onChange({ skipLastSec: v })} />

@@ -6,6 +6,8 @@ import { useFeeds } from '@/store/feeds';
 import { useLibrary } from '@/store/library';
 import { useSettings } from '@/store/settings';
 
+import { notifier } from '@/notifications';
+
 import { automation } from './auto';
 import { useDownloads } from './download-manager';
 
@@ -17,11 +19,12 @@ if (Platform.OS !== 'web') {
     try {
       await Promise.all([useLibrary.getState().hydrate(), useFeeds.getState().hydrate(), useSettings.getState().hydrate(), useDownloads.getState().hydrate()]);
       const podcasts = Object.values(useLibrary.getState().subscriptions)
-        .filter((s) => s.overrides.autoDownload)
+        .filter((s) => s.overrides.autoDownload || s.overrides.notifications)
         .map((s) => s.podcast);
       if (podcasts.length) {
         await useFeeds.getState().refreshAll(podcasts, { onlyStale: true });
         await automation.run();
+        await notifier.check();
       }
       return BackgroundTask.BackgroundTaskResult.Success;
     } catch {

@@ -33,6 +33,7 @@ import { episodeKey } from '@/lib/episode-state';
 import { capabilitiesFor } from '@/lib/podcast-capabilities';
 import { hostLabel } from '@/lib/podcast-id';
 import { toggleEpisode } from '@/player';
+import { requestNotificationPermission } from '@/notifications/platform';
 import { downloadsSupported, useDownloads } from '@/downloads/download-manager';
 import { useFeeds } from '@/store/feeds';
 import { useLibrary } from '@/store/library';
@@ -420,7 +421,17 @@ export default function PodcastScreen() {
         visible={settingsOpen}
         title={podcast.title}
         overrides={overrides}
-        onChange={(patch) => lib.setOverride(id, patch)}
+        onChange={(patch) => {
+          // Turning notifications on asks for permission first (Android 13+ / iOS).
+          if (patch.notifications) {
+            void requestNotificationPermission().then((ok) => {
+              if (ok) lib.setOverride(id, patch);
+              else useToast.getState().show('Allow notifications for VibeCasts in system settings to get new-episode alerts');
+            });
+            return;
+          }
+          lib.setOverride(id, patch);
+        }}
         onClose={() => setSettingsOpen(false)}
       />
       <NamePrompt
