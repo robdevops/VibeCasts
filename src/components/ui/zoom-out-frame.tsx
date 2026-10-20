@@ -33,16 +33,19 @@ export function ZoomOutFrame({ originKey, children }: { originKey: string; child
       endScale.set(Math.max(0.05, o.size / frame.current.w));
       exit.set(withTiming(1, { duration: SHRINK_MS, easing: Easing.out(Easing.cubic) }));
     };
-    const nav = navigation as unknown as { addListener(e: string, cb: (ev: { data?: { closing?: boolean } }) => void): () => void };
-    // `beforeRemove` fires the moment going back is dispatched (before the native transition starts), sooner than
-    // `transitionStart`, so the shrink begins with the pop; `transitionStart` is the backup.
+    const nav = navigation as unknown as { addListener(e: string, cb: () => void): () => void };
+    // `beforeRemove` fires only for the screen that is actually being removed, the moment going back is dispatched (before
+    // the native transition starts). `transitionStart` is deliberately not used: it also fires for a screen that is merely
+    // being covered by another page, which shrank a folder page whenever a show was opened from inside it.
     const offBefore = nav.addListener('beforeRemove', start);
-    const offTransition = nav.addListener('transitionStart', (e) => {
-      if (e.data?.closing) start();
+    // Back on top again (e.g. after a show opened from here is closed): never stay shrunk.
+    const offFocus = nav.addListener('focus', () => {
+      exit.set(0);
+      setClosing(false);
     });
     return () => {
       offBefore();
-      offTransition();
+      offFocus();
     };
   }, [navigation, originKey, exit, originX, originY, endScale]);
 
