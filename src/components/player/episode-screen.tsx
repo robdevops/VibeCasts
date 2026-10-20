@@ -1,6 +1,6 @@
 import Slider from '@react-native-community/slider';
 import * as Haptics from 'expo-haptics';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router } from 'expo-router';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { LayoutAnimation, Linking, Pressable, ScrollView, Share, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
@@ -8,7 +8,6 @@ import Animated, { interpolate, useAnimatedStyle, useSharedValue, type SharedVal
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ELASTIC_SCROLL } from '@/constants/scroll';
-import { AFTER_CLOSE_MS, SlideUpFrame } from '@/components/ui/slide-up-frame';
 import type { Episode, Podcast } from '@/api/types';
 import { ThemedText } from '@/components/themed-text';
 import { Artwork } from '@/components/ui/artwork';
@@ -41,16 +40,6 @@ const ACCENT = '#B79CFF';
 
 type Tab = 'playing' | 'details' | 'bookmarks';
 type Sheet = 'speed' | 'sleep' | 'menu' | null;
-
-/** The episode route: browse any episode (a modal over the app). */
-export default function EpisodeScreen() {
-  const params = useLocalSearchParams<{ podcastId?: string; episodeId?: string }>();
-  return (
-    <SlideUpFrame>
-      <EpisodeView podcastId={params.podcastId} episodeId={params.episodeId} onClose={close} />
-    </SlideUpFrame>
-  );
-}
 
 type ViewProps = {
   podcastId?: string;
@@ -184,8 +173,7 @@ export function EpisodeView({ podcastId, episodeId, onClose, sheet: isSheet = fa
 
   const openQueue = () => {
     onClose();
-    // Wait for the page to finish sliding away, or the push would land before the (held back) close.
-    setTimeout(() => router.push({ pathname: '/(tabs)/(playlists)/playlist/[id]', params: { id: 'up-next' } }), AFTER_CLOSE_MS);
+    router.push({ pathname: '/(tabs)/(playlists)/playlist/[id]', params: { id: 'up-next' } });
   };
 
   const queueIt = (where: 'first' | 'last') => {
@@ -394,15 +382,9 @@ export function EpisodeView({ podcastId, episodeId, onClose, sheet: isSheet = fa
   );
 }
 
-function close() {
-  if (router.canGoBack()) router.back();
-  else router.replace('/');
-}
-
 function goToPodcast(id: string, leave: () => void) {
   leave();
-  // Wait for the page to finish sliding away, or the push would land before the (held back) close.
-  setTimeout(() => router.push({ pathname: '/(tabs)/(podcasts)/podcast/[id]', params: { id } }), AFTER_CLOSE_MS);
+  router.push({ pathname: '/(tabs)/(podcasts)/podcast/[id]', params: { id } });
 }
 
 const TAB_LABEL: Record<Tab, string> = { playing: 'Playing', details: 'Details', bookmarks: 'Bookmarks' };
