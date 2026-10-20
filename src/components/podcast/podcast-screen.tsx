@@ -39,6 +39,7 @@ import { toRef, type EpisodeRef } from '@/lib/playlist';
 import { usePlaylists } from '@/store/playlists';
 import { requestNotificationPermission } from '@/notifications/platform';
 import { downloadsSupported, useDownloads } from '@/downloads/download-manager';
+import { ZoomOutFrame } from '@/components/ui/zoom-out-frame';
 import { useFeeds } from '@/store/feeds';
 import { useLibrary } from '@/store/library';
 import { useToast } from '@/store/toast';
@@ -433,6 +434,7 @@ export default function PodcastScreen() {
   );
 
   return (
+    <ZoomOutFrame originKey={`podcast:${id}`}>
     <ThemedView style={styles.fill}>
       <FlatList
         data={tab === 'episodes' ? shown : []}
@@ -521,6 +523,7 @@ export default function PodcastScreen() {
         }}
       />
     </ThemedView>
+    </ZoomOutFrame>
   );
 }
 
