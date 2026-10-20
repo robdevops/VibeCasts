@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { useTheme } from '@/hooks/use-theme';
+import { readableOn } from '@/lib/color';
 
 import { IconButton } from './icon-button';
 
@@ -16,19 +17,22 @@ type Props = {
   onBack?: () => void;
   /** Replaces the title (e.g. a search field). */
   center?: ReactNode;
+  /** Paint the whole bar (status bar area included) in this colour, with text and icons that read on it. */
+  tint?: string;
 };
 
-export function ScreenHeader({ title, large, back, right, onBack, center }: Props) {
+export function ScreenHeader({ title, large, back, right, onBack, center, tint }: Props) {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
+  const ink = tint ? readableOn(tint) : theme.accent;
   return (
-    <View style={[styles.bar, { paddingTop: insets.top, backgroundColor: theme.background }]}>
+    <View style={[styles.bar, { paddingTop: insets.top, backgroundColor: tint ?? theme.background }]}>
       <View style={styles.row}>
         {back ? (
           <IconButton
             name="arrow-back"
             label="Back"
-            color={theme.accent}
+            color={ink}
             onPress={onBack ?? (() => (router.canGoBack() ? router.back() : router.replace('/')))}
           />
         ) : null}
@@ -39,7 +43,7 @@ export function ScreenHeader({ title, large, back, right, onBack, center }: Prop
             type={large ? 'title' : 'subtitle'}
             numberOfLines={1}
             accessibilityRole="header"
-            style={[styles.title, large ? styles.large : null, back ? { color: theme.accent } : null]}>
+            style={[styles.title, large ? styles.large : null, tint ? { color: ink } : back ? { color: theme.accent } : null]}>
             {title}
           </ThemedText>
         )}

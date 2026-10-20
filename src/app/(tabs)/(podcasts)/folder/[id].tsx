@@ -11,13 +11,12 @@ import { MenuSheet } from '@/components/ui/menu-sheet';
 import { NamePrompt } from '@/components/ui/name-prompt';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { ZoomOutFrame } from '@/components/ui/zoom-out-frame';
-import { useTheme } from '@/hooks/use-theme';
+import { readableOn } from '@/lib/color';
 import { useFeeds } from '@/store/feeds';
 import { useLibrary } from '@/store/library';
 
 export default function FolderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const theme = useTheme();
   const folder = useLibrary((s) => s.folders[id]);
   const order = useLibrary((s) => s.folderOrder[id]);
   const subscriptions = useLibrary((s) => s.subscriptions);
@@ -49,7 +48,8 @@ export default function FolderScreen() {
       <ScreenHeader
         title={folder.name}
         back
-        right={<IconButton name="more-vert" label="Folder options" color={theme.accent} onPress={() => setMenu(true)} />}
+        tint={folder.color}
+        right={<IconButton name="more-vert" label="Folder options" color={readableOn(folder.color)} onPress={() => setMenu(true)} />}
       />
       <View style={styles.fill}>
         <LibraryGrid
