@@ -1,10 +1,11 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  LayoutAnimation,
   Linking,
   Platform,
   Pressable,
@@ -44,9 +45,12 @@ import { useToast } from '@/store/toast';
 
 import { BookmarkList } from './bookmark-list';
 import { EpisodeRow } from './episode-row';
-import { SettingsSheet } from './settings-sheet';
 
-type Menu = 'overflow' | 'gear' | 'folder' | 'selection' | null;
+type Menu = 'overflow' | 'gear' | 'folder' | 'skipFirst' | 'skipLast' | 'selection' | null;
+
+/** Choices for "skip first / last" (seconds). */
+const SKIP_CHOICES = [0, 5, 10, 15, 20, 30, 45, 60, 90, 120];
+const skipLabel = (sec: number) => (sec ? `${sec} s` : 'Off');
 
 export default function PodcastScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -82,10 +86,29 @@ export default function PodcastScreen() {
   const [showArchived, setShowArchived] = useState(false);
   const [sort, setSort] = useState<EpisodeSort>('newest');
   const [tab, setTab] = useState<'episodes' | 'bookmarks'>('episodes');
+  // Switching to the (short) bookmarks list must not make the page jump back to the top: hold the
+  // scroll range open (current offset + one screen) while it is showing.
+  const scrollY = useRef(0);
+  const viewportH = useRef(0);
+  const [holdHeight, setHoldHeight] = useState(0);
+  const switchTab = (next: 'episodes' | 'bookmarks') => {
+    if (next === 'bookmarks') {
+      // Open the scroll range first, then swap the list a frame later: if the content shrank first,
+      // the scroll position would already have been clamped to the top.
+      setHoldHeight(scrollY.current + viewportH.current);
+      requestAnimationFrame(() => {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setTab('bookmarks');
+      });
+    } else {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setTab('episodes');
+      setHoldHeight(0);
+    }
+  };
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [aboutOpen, setAboutOpen] = useState(false);
   const [menu, setMenu] = useState<Menu>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [playlistOpen, setPlaylistOpen] = useState(false);
   const [newFolder, setNewFolder] = useState(false);
 
@@ -195,14 +218,51 @@ export default function PodcastScreen() {
     { label: 'Download newest 10 unplayed', icon: 'file-download', disabled: !downloadsSupported || !podcast, onPress: downloadNewest },
   ]);
 
+  // Turning notifications on asks for permission first (Android 13+ / iOS).
+  const setNotifications = (on: boolean) => {
+    if (!on) {
+      lib.setOverride(id, { notifications: false });
+      return;
+    }
+    void requestNotificationPermission().then((ok) => {
+      if (ok) lib.setOverride(id, { notifications: true });
+      else useToast.getState().show('Allow notifications for VibeCasts in system settings to get new-episode alerts');
+    });
+  };
+
   // The gear menu: subscription and everything that belongs to a subscription.
   const gearItems = closing([
     subscribed
       ? { label: 'Unsubscribe', icon: 'remove-circle-outline', destructive: true, onPress: () => void unsubscribe() }
       : { label: 'Subscribe', icon: 'add-circle-outline', onPress: subscribe },
     { label: 'Folder…', icon: 'folder-open', separator: true, disabled: !caps.folder, onPress: () => setMenu('folder') },
-    { label: 'Podcast settings…', icon: 'settings', disabled: !caps.skipSettings, onPress: () => setSettingsOpen(true) },
+    {
+      label: 'Notifications',
+      icon: 'notifications-none',
+      separator: true,
+      checked: !!overrides.notifications,
+      disabled: !caps.notifications,
+      onPress: () => setNotifications(!overrides.notifications),
+    },
+    {
+      label: 'Auto download',
+      icon: 'file-download',
+      checked: !!overrides.autoDownload,
+      disabled: !caps.autoDownload,
+      onPress: () => lib.setOverride(id, { autoDownload: !overrides.autoDownload }),
+    },
+    { label: `Skip first: ${skipLabel(overrides.skipFirstSec ?? 0)}…`, icon: 'skip-next', disabled: !caps.skipSettings, onPress: () => setMenu('skipFirst') },
+    { label: `Skip last: ${skipLabel(overrides.skipLastSec ?? 0)}…`, icon: 'skip-previous', disabled: !caps.skipSettings, onPress: () => setMenu('skipLast') },
   ]);
+
+  const skipItems = (field: 'skipFirstSec' | 'skipLastSec') =>
+    closing(
+      SKIP_CHOICES.map((sec) => ({
+        label: skipLabel(sec),
+        checked: (overrides[field] ?? 0) === sec,
+        onPress: () => lib.setOverride(id, { [field]: sec }),
+      })),
+    );
 
   const folderItems = closing([
     { label: 'No folder', icon: 'folder-off', checked: !sub?.folderId, onPress: () => lib.removeFromFolder(id) },
@@ -271,21 +331,14 @@ export default function PodcastScreen() {
           </ThemedText>
         ) : null}
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Podcast menu"
-          onPress={() => setMenu('gear')}
-          style={[styles.round, { backgroundColor: theme.backgroundElement, marginTop: 8 }]}>
-          <Icon name="settings" size={24} color={theme.textSecondary} />
-        </Pressable>
         {!subscribed ? (
           <ThemedText type="small" themeColor="textSecondary" style={styles.centerText}>
-            Not subscribed. Open the menu to subscribe.
+            Not subscribed. Tap the gear to subscribe.
           </ThemedText>
         ) : null}
       </View>
 
-      {aboutOpen || schedule || website ? (
+      {(
         <View style={styles.about}>
           {aboutOpen && description ? (
             <ThemedText type="small" themeColor="textSecondary">
@@ -301,6 +354,13 @@ export default function PodcastScreen() {
                 </ThemedText>
               </View>
             ) : null}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Podcast menu"
+              onPress={() => setMenu('gear')}
+              style={[styles.gear, { backgroundColor: theme.backgroundElement }]}>
+              <Icon name="settings" size={22} color={theme.textSecondary} />
+            </Pressable>
             {website ? (
               <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(website)} style={styles.meta}>
                 <Icon name="language" size={18} color={theme.badge} />
@@ -311,7 +371,7 @@ export default function PodcastScreen() {
             ) : null}
           </View>
         </View>
-      ) : null}
+      )}
 
       <View style={styles.tabs}>
         {(['episodes', 'bookmarks'] as const).map((t) => (
@@ -319,7 +379,7 @@ export default function PodcastScreen() {
             key={t}
             accessibilityRole="tab"
             accessibilityState={{ selected: tab === t }}
-            onPress={() => setTab(t)}
+            onPress={() => switchTab(t)}
             style={[styles.pill, { backgroundColor: tab === t ? theme.text : 'transparent' }]}>
             <ThemedText type="smallBold" style={{ color: tab === t ? theme.background : theme.textSecondary }}>
               {t === 'episodes' ? 'Episodes' : 'Bookmarks'}
@@ -381,7 +441,14 @@ export default function PodcastScreen() {
         ListHeaderComponent={header}
         keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={false} onRefresh={refresh} tintColor={theme.accent} />}
-        contentContainerStyle={{ paddingBottom: 32 }}
+        contentContainerStyle={{ paddingBottom: 32, minHeight: holdHeight || undefined }}
+        onScroll={(e) => {
+          scrollY.current = e.nativeEvent.contentOffset.y;
+        }}
+        scrollEventThrottle={32}
+        onLayout={(e) => {
+          viewportH.current = e.nativeEvent.layout.height;
+        }}
         initialNumToRender={12}
         windowSize={9}
         renderItem={({ item }) => (
@@ -431,6 +498,8 @@ export default function PodcastScreen() {
       <MenuSheet visible={menu === 'overflow'} items={overflowItems} onClose={() => setMenu(null)} />
       <MenuSheet visible={menu === 'gear'} items={gearItems} onClose={() => setMenu(null)} />
       <MenuSheet visible={menu === 'folder'} items={folderItems} title="Folder" onClose={() => setMenu(null)} />
+      <MenuSheet visible={menu === 'skipFirst'} items={skipItems('skipFirstSec')} title="Skip first" onClose={() => setMenu(null)} />
+      <MenuSheet visible={menu === 'skipLast'} items={skipItems('skipLastSec')} title="Skip last" onClose={() => setMenu(null)} />
       <MenuSheet visible={menu === 'selection'} items={selectionItems} onClose={() => setMenu(null)} />
       <AddToPlaylistSheet
         visible={playlistOpen}
@@ -439,23 +508,6 @@ export default function PodcastScreen() {
           setPlaylistOpen(false);
           setSelected(new Set());
         }}
-      />
-      <SettingsSheet
-        visible={settingsOpen}
-        title={podcast.title}
-        overrides={overrides}
-        onChange={(patch) => {
-          // Turning notifications on asks for permission first (Android 13+ / iOS).
-          if (patch.notifications) {
-            void requestNotificationPermission().then((ok) => {
-              if (ok) lib.setOverride(id, patch);
-              else useToast.getState().show('Allow notifications for VibeCasts in system settings to get new-episode alerts');
-            });
-            return;
-          }
-          lib.setOverride(id, patch);
-        }}
-        onClose={() => setSettingsOpen(false)}
       />
       <NamePrompt
         visible={newFolder}
@@ -506,7 +558,8 @@ const styles = StyleSheet.create({
   round: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
   subscribe: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 46, borderRadius: 23, paddingHorizontal: 20 },
   about: { paddingHorizontal: 16, paddingTop: 4, gap: 10 },
-  metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 18, justifyContent: 'center' },
+  gear: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 18, justifyContent: 'center', alignItems: 'center' },
   meta: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: 220 },
   tabs: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 10 },
   pill: { borderRadius: 18, paddingHorizontal: 16, paddingVertical: 9 },

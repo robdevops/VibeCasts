@@ -6,6 +6,7 @@ import { useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { ToastHost } from '@/components/ui/toast-host';
+import { PlayerSheet } from '@/components/player/player-sheet';
 import { startDownloadAutomation } from '@/downloads/auto';
 import { registerAutoDownloadTask } from '@/downloads/background';
 import { useDownloads } from '@/downloads/download-manager';
@@ -81,6 +82,7 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="episode" options={{ presentation: 'modal', animation: 'slide_from_bottom', gestureEnabled: true }} />
         </Stack>
+        <PlayerSheet />
         <ToastHost />
       </ThemeProvider>
     </GestureHandlerRootView>

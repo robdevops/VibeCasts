@@ -2,6 +2,7 @@ import Slider from '@react-native-community/slider';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { LayoutAnimation, Linking, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
+import { GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { Episode, Podcast } from '@/api/types';
@@ -25,7 +26,8 @@ import { useSettings } from '@/store/settings';
 import { useToast } from '@/store/toast';
 
 import { SkipIcon } from './skip-icon';
-import { SwipeIgnore, SwipeTabs } from './swipe-tabs';
+import { usePlayerSheetDrag } from './sheet-state';
+import { SwipeIgnore, TabPager } from './tab-pager';
 import { SleepSheet } from './sleep-sheet';
 import { SpeedSheet } from './speed-sheet';
 
@@ -36,9 +38,25 @@ const ACCENT = '#FF5A52';
 type Tab = 'playing' | 'details' | 'bookmarks';
 type Sheet = 'speed' | 'sleep' | 'menu' | null;
 
+/** The episode route: browse any episode (a modal over the app). */
 export default function EpisodeScreen() {
   const params = useLocalSearchParams<{ podcastId?: string; episodeId?: string }>();
+  return <EpisodeView podcastId={params.podcastId} episodeId={params.episodeId} onClose={close} />;
+}
+
+type ViewProps = {
+  podcastId?: string;
+  episodeId?: string;
+  onClose: () => void;
+  /** Rendered as the always-there player sheet (dragged by its header) rather than a route. */
+  sheet?: boolean;
+};
+
+/** The player/episode screen: the current episode when no ids are given. */
+export function EpisodeView({ podcastId, episodeId, onClose, sheet: isSheet = false }: ViewProps) {
+  const params = { podcastId, episodeId };
   const insets = useSafeAreaInsets();
+  const sheetDrag = usePlayerSheetDrag();
 
   const current = usePlayer((s) => s.current);
   const playing = usePlayer((s) => s.playing);
@@ -98,7 +116,7 @@ export default function EpisodeScreen() {
   if (!viewed) {
     return (
       <View style={[styles.screen, { paddingTop: insets.top }]}>
-        <Header tab="details" tabs={['details']} onTab={() => {}} onClose={close} />
+        <Header tab="details" tabs={['details']} onTab={() => {}} onClose={onClose} />
         <ThemedText style={styles.empty}>Nothing is playing yet.</ThemedText>
       </View>
     );
@@ -131,7 +149,7 @@ export default function EpisodeScreen() {
   };
 
   const openQueue = () => {
-    close();
+    onClose();
     router.push({ pathname: '/(tabs)/(playlists)/playlist/[id]', params: { id: 'up-next' } });
   };
 
@@ -163,7 +181,7 @@ export default function EpisodeScreen() {
       disabled: !episode.transcriptUrl,
       onPress: () => episode.transcriptUrl && void Linking.openURL(episode.transcriptUrl),
     },
-    { label: 'Go to podcast', icon: 'podcasts', onPress: () => goToPodcast(podcast.id) },
+    { label: 'Go to podcast', icon: 'podcasts', onPress: () => goToPodcast(podcast.id, onClose) },
     { label: 'Add bookmark', icon: 'bookmark-add', onPress: addBookmark },
     {
       label: state.played ? 'Mark as unplayed' : 'Mark as played',
@@ -178,12 +196,8 @@ export default function EpisodeScreen() {
   ];
   const menuItems = baseItems.map((i) => ({ ...i, onPress: () => { setSheet(null); i.onPress(); } }));
 
-  return (
-    <View style={[styles.screen, { paddingTop: insets.top }]}>
-      <Header tab={tab} tabs={tabList} onTab={setTab} onClose={close} onQueue={openQueue} />
-
-      <SwipeTabs tabs={tabList} tab={tab} onTab={setTab}>
-      {tab === 'playing' ? (
+  // The three tabs sit side by side in a pager that follows your finger.
+  const playingPanel = (
         <View style={styles.body}>
           {!isCurrent ? (
             <View style={styles.previewTop}>
@@ -196,7 +210,7 @@ export default function EpisodeScreen() {
                   <ThemedText type="smallBold" style={styles.detailTitle} numberOfLines={3} accessibilityRole="header">
                     {episode.title}
                   </ThemedText>
-                  <Pressable accessibilityRole="link" onPress={() => goToPodcast(podcast.id)}>
+                  <Pressable accessibilityRole="link" onPress={() => goToPodcast(podcast.id, onClose)}>
                     <ThemedText type="small" style={{ color: ACCENT }} numberOfLines={1}>
                       {podcast.title}
                     </ThemedText>
@@ -216,7 +230,7 @@ export default function EpisodeScreen() {
             <ThemedText type="subtitle" style={styles.title} numberOfLines={3} accessibilityRole="header">
               {episode.title}
             </ThemedText>
-            <Pressable accessibilityRole="link" onPress={() => goToPodcast(podcast.id)}>
+            <Pressable accessibilityRole="link" onPress={() => goToPodcast(podcast.id, onClose)}>
               <ThemedText style={styles.podcastName} numberOfLines={1}>
                 {podcast.title}
               </ThemedText>
@@ -252,14 +266,14 @@ export default function EpisodeScreen() {
             <Pressable accessibilityRole="button" accessibilityLabel={`Skip back ${skipBack} seconds`} disabled={!isCurrent} onPress={() => usePlayer.getState().skipBack()} hitSlop={10} style={!isCurrent ? styles.dim : undefined}>
               <SkipIcon direction="back" seconds={skipBack} size={56} color="#fff" />
             </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel={playing ? 'Pause' : 'Play'} onPress={playPause} style={styles.bigPlay}>
-              <Icon name={playing ? 'pause' : 'play-arrow'} size={56} color={BG} />
+            <Pressable accessibilityRole="button" accessibilityLabel={isCurrent && playing ? 'Pause' : 'Play'} onPress={playPause} style={styles.bigPlay}>
+              <Icon name={isCurrent && playing ? 'pause' : 'play-arrow'} size={56} color={BG} />
             </Pressable>
             <Pressable accessibilityRole="button" accessibilityLabel={`Skip forward ${skipForward} seconds`} disabled={!isCurrent} onPress={() => usePlayer.getState().skipForward()} hitSlop={10} style={!isCurrent ? styles.dim : undefined}>
               <SkipIcon direction="forward" seconds={skipForward} size={56} color="#fff" />
             </Pressable>
           </View>
-          {buffering && playing ? <ThemedText type="small" style={[styles.time, styles.center]}>Buffering…</ThemedText> : null}
+          {isCurrent && buffering && playing ? <ThemedText type="small" style={[styles.time, styles.center]}>Buffering…</ThemedText> : null}
 
           <View style={[styles.bar, { marginBottom: insets.bottom + 12 }]}>
             <BarButton name="speed" label={`Playback speed ${formatRate(rate)}`} text={rate === 1 ? undefined : formatRate(rate)} active={rate !== 1} onPress={() => setSheet('speed')} />
@@ -269,9 +283,9 @@ export default function EpisodeScreen() {
             <BarButton name="more-vert" label="More" onPress={() => setSheet('menu')} />
           </View>
         </View>
-      ) : (
-        <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 24 }]}>
-          {tab === 'details' ? (
+  );
+  const detailsPanel = (
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 24 }]}>
             <>
               <View style={styles.detailHead}>
                 <Artwork uri={episode.artwork ?? podcast.artwork} title={podcast.title} size={72} radius={10} />
@@ -280,7 +294,7 @@ export default function EpisodeScreen() {
                     {[episodeDateLabel(episode.published), durationLabel(episode.durationSec)].filter(Boolean).join(' · ')}
                   </ThemedText>
                   <ThemedText type="smallBold" style={styles.detailTitle}>{episode.title}</ThemedText>
-                  <Pressable accessibilityRole="link" onPress={() => goToPodcast(podcast.id)}>
+                  <Pressable accessibilityRole="link" onPress={() => goToPodcast(podcast.id, onClose)}>
                     <ThemedText type="small" style={{ color: ACCENT }}>{podcast.title}</ThemedText>
                   </Pressable>
                 </View>
@@ -295,7 +309,10 @@ export default function EpisodeScreen() {
               ) : null}
               <ThemedText style={styles.notes}>{stripHtml(episode.description) || (feedLoading || needsNotes ? 'Loading show notes…' : 'No show notes for this episode.')}</ThemedText>
             </>
-          ) : (
+      </ScrollView>
+  );
+  const bookmarksPanel = (
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 24 }]}>
             <>
               <Pressable accessibilityRole="button" onPress={addBookmark} style={[styles.playCta, !isCurrent ? { opacity: 0.4 } : null]}>
                 <Icon name="bookmark-add" size={22} color={BG} />
@@ -325,10 +342,14 @@ export default function EpisodeScreen() {
                 ))
               )}
             </>
-          )}
-        </ScrollView>
-      )}
-      </SwipeTabs>
+      </ScrollView>
+  );
+
+  return (
+    <View style={[styles.screen, { paddingTop: insets.top }]}>
+      <Header tab={tab} tabs={tabList} onTab={setTab} onClose={onClose} onQueue={openQueue} drag={isSheet ? sheetDrag : undefined} />
+
+      <TabPager tabs={tabList} tab={tab} onTab={setTab} panels={{ playing: playingPanel, details: detailsPanel, bookmarks: bookmarksPanel }} />
 
       <SpeedSheet visible={sheet === 'speed'} rate={rate} onChange={(r) => usePlayer.getState().setRate(r)} onClose={() => setSheet(null)} />
       <SleepSheet visible={sheet === 'sleep'} sleep={sleep} now={now} onChoose={(o) => usePlayer.getState().setSleep(o)} onClose={() => setSheet(null)} />
@@ -343,15 +364,15 @@ function close() {
   else router.replace('/');
 }
 
-function goToPodcast(id: string) {
-  close();
+function goToPodcast(id: string, leave: () => void) {
+  leave();
   router.push({ pathname: '/(tabs)/(podcasts)/podcast/[id]', params: { id } });
 }
 
 const TAB_LABEL: Record<Tab, string> = { playing: 'Playing', details: 'Details', bookmarks: 'Bookmarks' };
 
-function Header({ tab, tabs, onTab, onClose, onQueue }: { tab: Tab; tabs: Tab[]; onTab: (t: Tab) => void; onClose: () => void; onQueue?: () => void }) {
-  return (
+function Header({ tab, tabs, onTab, onClose, onQueue, drag }: { tab: Tab; tabs: Tab[]; onTab: (t: Tab) => void; onClose: () => void; onQueue?: () => void; drag?: ReturnType<typeof usePlayerSheetDrag> }) {
+  const row = (
     <View style={styles.header}>
       <Pressable accessibilityRole="button" accessibilityLabel="Close player" onPress={onClose} hitSlop={10} style={styles.close}>
         <Icon name="keyboard-arrow-down" size={32} color="#fff" />
@@ -372,6 +393,8 @@ function Header({ tab, tabs, onTab, onClose, onQueue }: { tab: Tab; tabs: Tab[];
       ) : null}
     </View>
   );
+  // In the sheet, dragging the header pushes the player down in real time.
+  return drag ? <GestureDetector gesture={drag}>{row}</GestureDetector> : row;
 }
 
 function BarButton({ name, label, text, active, onPress }: { name: IconName; label: string; text?: string; active?: boolean; onPress: () => void }) {

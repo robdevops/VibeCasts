@@ -61,3 +61,8 @@ Node 24 (`.nvmrc`), Xcode (iOS Simulator), Android Studio (AVD). `npx expo start
 - `store/playlists.ts` (`usePlaylists`): the Up Next queue plus named playlists, persisted under `playlists.v1`. Items are `EpisodeRef`s (`lib/playlist.ts`: slim episode + show, no notes) so they play without the feed. Pure list helpers (`addRefs`, `removeRef`, `moveRef`) are tested.
 - `store/player.ts` rolls on into Up Next when an episode finishes (not after "stop at end of episode"), and starting an episode removes it from the queue. Playing a playlist item queues the rest of the playlist.
 - UI: Playlists tab (`(playlists)/playlists.tsx`), `(playlists)/playlist/[id].tsx` (id `up-next` is the queue; move/remove with arrows), "Play next / Play last / Add to playlist…" on the episode menu and the podcast page's multi-select menu, and a queue button on the episode screen header.
+
+## Player sheet and tab pager
+- The current episode's full player is `PlayerSheet` (root `_layout.tsx`), always mounted while something is loaded and moved by the shared value `sheetProgress` (`player/sheet-state.ts`): the mini player and the sheet header share `usePlayerSheetDrag` (worklet gesture, follows the finger, opens past the halfway point or on a fast flick, otherwise springs back); tapping the mini player runs `openPlayerSheet`. Browsing other episodes still uses the `/episode` modal route (both render `EpisodeView`).
+- Playing / Details / Bookmarks live in `TabPager` (`player/tab-pager.tsx`): panels side by side that follow the finger; `SwipeIgnore` (measured relative to the pager) keeps the seek bar's own drag.
+- Podcast page: tapping Bookmarks holds the scroll range open (`holdHeight`) so the page doesn't jump to the top.
