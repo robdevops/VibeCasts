@@ -16,7 +16,8 @@ export async function prefetchTileArtwork(uris: string[], opts: { batch?: number
   const px = metricsFor(Dimensions.get('window').width).tile * PixelRatio.get();
   const size = opts.low ? artworkLow : (u: string) => artworkSized(u, px);
   // "The whole lot" stops at 200 shows (in display order) so a huge library can't flood the network or cache.
-  const urls = [...new Set(uris.filter(Boolean))].slice(0, MAX_PREFETCH).map(size);
+  // The small pass only covers hosts that can be resized by URL; the others get on-phone thumbnails (`artwork/thumbs`).
+  const urls = [...new Set(uris.filter((u) => u && (!opts.low || artworkLow(u) !== u)))].slice(0, MAX_PREFETCH).map(size);
   for (let i = 0; i < urls.length; i += batch) {
     if (opts.shouldContinue && !opts.shouldContinue()) return; // locked or another tab: stop; the next visit picks it up
     await Image.prefetch(urls.slice(i, i + batch), 'memory-disk').catch(() => false);
