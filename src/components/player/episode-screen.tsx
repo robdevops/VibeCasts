@@ -429,8 +429,11 @@ function TabStrip({ tab, tabs, onTab, pagerX, pageWidth }: { tab: Tab; tabs: Tab
   const count = tabs.length;
   const underline = useAnimatedStyle(() => {
     const ls = layouts.get();
-    if (ls.length !== count) return { opacity: 0 };
     const f = Math.min(count - 1, Math.max(0, -offset.get() / pageWidth));
+    // Hidden until every label has been measured (labels report their size in any order).
+    for (let i = 0; i < count; i++) {
+      if (!ls[i] || ls[i].w === 0) return { opacity: 0 };
+    }
     if (count < 2) return { opacity: 1, left: ls[0].x, width: ls[0].w };
     // Slide between the two neighbouring labels. (No inline arrow functions in here: they would be
     // hoisted out of the worklet and can't be called on the UI thread.)
@@ -449,8 +452,9 @@ function TabStrip({ tab, tabs, onTab, pagerX, pageWidth }: { tab: Tab; tabs: Tab
           onPress={() => onTab(t)}
           onLayout={(e) => {
             const { x, width } = e.nativeEvent.layout;
-            const next = layouts.get().slice();
-            next[i] = { x, w: width };
+            const next = [];
+            const prev = layouts.get();
+            for (let j = 0; j < tabs.length; j++) next.push(j === i ? { x, w: width } : (prev[j] ?? { x: 0, w: 0 }));
             layouts.set(next);
           }}
           style={styles.tab}>
