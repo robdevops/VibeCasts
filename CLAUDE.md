@@ -25,6 +25,10 @@ Each tab is a route group with its own stack (`src/app/(tabs)/(podcasts)`, `(dis
 ## Local (macOS) emulator
 Node 24 (`.nvmrc`), Xcode (iOS Simulator), Android Studio (AVD). `npx expo start`, then `i` / `a`. Claude Code run locally can screenshot with `xcrun simctl io booted screenshot x.png` or `adb exec-out screencap -p > x.png`.
 
+## Page transitions
+- Native stack `animationDuration` is iOS only (and ignored for modal presentation): on Android the route animations (`fade`, `slide_from_bottom`...) run at the system's fixed durations. So the folder / show page `fade` in `(podcasts)/_layout.tsx` is 500 ms on iOS and the system's on Android. Anything whose speed we must control is animated by the page itself.
+- The `/episode` browse page does that: the root route is `presentation: 'transparentModal'`, `animation: 'none'`, and `components/ui/slide-up-frame.tsx` (`SlideUpFrame`, 200 ms up, 170 ms down) slides it. It holds the first removal back (`beforeRemove` + `preventDefault`) until the slide down is done, then dispatches the same action, so anything that navigates elsewhere right after closing must wait `AFTER_CLOSE_MS` (see `goToPodcast` / `openQueue` in `episode-screen.tsx`). No swipe-down-to-dismiss (the native modal gesture is gone); use the close button or Back.
+
 ## Scrolling
 Vertical lists spread `ELASTIC_SCROLL` (`constants/scroll.ts`: `overScrollMode: 'always'`, `bounces`, `alwaysBounceVertical`) so they stretch at the top and bottom like an elastic band: iOS bounce, and on Android the system's own overscroll (the stretch effect on Android 12+, a glow on older versions). Popover menus keep `bounces={false}` on purpose.
 
