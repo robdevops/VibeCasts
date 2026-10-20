@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import { AppState, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+import { ArtFlight } from '@/components/ui/art-flight';
 import { ToastHost } from '@/components/ui/toast-host';
 import { flushAllWrites } from '@/db/writer';
 import { PlayerSheet } from '@/components/player/player-sheet';
@@ -80,6 +81,7 @@ export default function RootLayout() {
           <Stack.Screen name="episode" options={{ presentation: 'modal', animation: 'slide_from_bottom', gestureEnabled: true }} />
         </Stack>
         <PlayerSheet />
+        <ArtFlight />
         <ToastHost />
       </ThemeProvider>
     </GestureHandlerRootView>

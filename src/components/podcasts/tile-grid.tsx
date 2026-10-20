@@ -19,6 +19,7 @@ import { HEADER_HEIGHT } from '@/components/ui/screen-header';
 import { useTheme } from '@/hooks/use-theme';
 import { contentHeight, metricsFor, mountedRange, nearCenter, slotAt, slotRect, tileAt, visibleRange, type GridMetrics } from '@/lib/grid';
 import { FOLDER_ZOOM, SHRINK_MS, pushZoomOrigin, ZOOM_MS } from '@/lib/folder-zoom';
+import { useFlight } from '@/store/flight';
 import { parseKey, reorder } from '@/lib/layout';
 
 export type GridItem = { key: string; kind: 'podcast' | 'folder' };
@@ -48,6 +49,8 @@ type Props = {
   onDragFinish?: () => void;
   /** The range of item indexes near the viewport changed (for loading what is on screen first). */
   onVisibleChange?: (range: { start: number; end: number }) => void;
+  /** What a tapped podcast tile shows (its artwork and title), so the artwork can fly to the show's page. */
+  flightInfo?: (item: GridItem) => { uri?: string; title: string } | undefined;
 };
 
 type Drag = {
@@ -76,6 +79,7 @@ export function TileGrid({
   onDragBegin,
   onDragFinish,
   onVisibleChange,
+  flightInfo,
 }: Props) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -104,6 +108,7 @@ export function TileGrid({
   const zoomTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rootRef = useRef<View>(null);
   const focused = useIsFocused();
+  const flightKey = useFlight((st) => (st.phase === 'idle' ? null : st.key)); // the show whose artwork is flying: its tile is empty meanwhile
   const scrollNow = useRef(0);
   const contentH = useRef(0);
   const viewportH = useRef(0);
@@ -341,17 +346,28 @@ export function TileGrid({
     const at = tileAt(x, y, m, keys.length);
     const item = at >= 0 ? byKey.get(keys[at]) : undefined;
     if (FOLDER_ZOOM && item) {
-      if (zoomTimer.current) clearTimeout(zoomTimer.current);
-      zoom.set(0);
-      setZoomKey(item.key);
-      zoom.set(withTiming(1, { duration: ZOOM_MS }));
-      // Remember where this tile is on screen, so the folder page can shrink back into it when it closes.
       const rect = slotRect(at, m);
       const scroll = scrollNow.current;
-      const key = `${item.kind}:${parseKey(item.key).id}`;
-      rootRef.current?.measureInWindow((x, y) =>
-        pushZoomOrigin({ key, x: x + rect.left + m.tile / 2, y: y + rect.top + m.tile / 2 - scroll, size: m.tile }),
-      );
+      if (item.kind === 'folder') {
+        // A folder: its tile zooms towards you, and the folder page shrinks back into it when it closes.
+        if (zoomTimer.current) clearTimeout(zoomTimer.current);
+        zoom.set(0);
+        setZoomKey(item.key);
+        zoom.set(withTiming(1, { duration: ZOOM_MS }));
+        const key = `folder:${parseKey(item.key).id}`;
+        rootRef.current?.measureInWindow((x, y) =>
+          pushZoomOrigin({ key, x: x + rect.left + m.tile / 2, y: y + rect.top + m.tile / 2 - scroll, size: m.tile }),
+        );
+      } else {
+        // A show: its artwork flies from the tile to the artwork on the show's page, and back when the page closes.
+        const info = flightInfo?.(item);
+        if (info) {
+          const key = `podcast:${parseKey(item.key).id}`;
+          rootRef.current?.measureInWindow((x, y) =>
+            useFlight.getState().begin(key, info.uri, info.title, { x: x + rect.left, y: y + rect.top - scroll, size: m.tile }),
+          );
+        }
+      }
     }
     if (item) onPress(item);
   };
@@ -419,6 +435,11 @@ export function TileGrid({
     }, ZOOM_MS + 1500);
     return () => clearTimeout(t);
   }, [zoomKey, focused, zoom]);
+  // Safety net: this screen is back on top but a flight is still marked "open" (the page closed without reporting it), so
+  // hand the tile back rather than leave it empty.
+  useEffect(() => {
+    if (focused && flightKey !== null && useFlight.getState().phase === 'open') useFlight.getState().end();
+  }, [focused, flightKey]);
   const zoomStyle = useAnimatedStyle(() => {
     const z = zoom.get();
     return { opacity: 1 - z, transform: [{ scale: 1 + z * 4 }] };
@@ -454,7 +475,7 @@ export function TileGrid({
                     item={item}
                     index={index}
                     m={m}
-                    hidden={key === ghostKey || key === zoomKey}
+                    hidden={key === ghostKey || key === zoomKey || (flightKey !== null && flightKey === `${item.kind}:${parseKey(key).id}`)}
                     highlighted={key === hoverFolder}
                     renderItem={renderItem}
                     version={itemVersion ? itemVersion(item) : 0}
