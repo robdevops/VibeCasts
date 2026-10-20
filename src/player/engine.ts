@@ -48,6 +48,8 @@ export interface PlayerEngine {
   subscribe(listener: (s: EngineStatus) => void): () => void;
   /** Headset buttons set to "next / previous episode". */
   subscribeCommands(listener: (c: EngineCommand) => void): () => void;
+  /** What the system did to audio (focus changes, headphones leaving, button presses): for the playback log only. */
+  subscribeDiagnostics(listener: (kind: string, detail: string) => void): () => void;
 }
 
 /**
@@ -80,6 +82,7 @@ export function createExpoEngine(): PlayerEngine {
   let applied = false;
   const listeners = new Set<(s: EngineStatus) => void>();
   const commandListeners = new Set<(c: EngineCommand) => void>();
+  const diagnosticListeners = new Set<(kind: string, detail: string) => void>();
   let modeReady: Promise<void> | null = null;
   let buttons = { back: true, forward: true };
 
@@ -152,6 +155,9 @@ export function createExpoEngine(): PlayerEngine {
     (player as unknown as { addListener(event: string, cb: (e: { command?: string }) => void): unknown }).addListener('mediaCommand', (e) => {
       if (e?.command === 'nextEpisode' || e?.command === 'previousEpisode') commandListeners.forEach((l) => l(e.command as EngineCommand));
     });
+    (player as unknown as { addListener(event: string, cb: (e: { kind?: string; detail?: string }) => void): unknown }).addListener('audioEvent', (e) => {
+      if (e?.kind) diagnosticListeners.forEach((l) => l(e.kind as string, e.detail ?? ''));
+    });
     return player;
   };
 
@@ -207,6 +213,10 @@ export function createExpoEngine(): PlayerEngine {
     subscribeCommands(listener) {
       commandListeners.add(listener);
       return () => commandListeners.delete(listener);
+    },
+    subscribeDiagnostics(listener) {
+      diagnosticListeners.add(listener);
+      return () => diagnosticListeners.delete(listener);
     },
   };
 }
