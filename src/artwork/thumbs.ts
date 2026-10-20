@@ -13,7 +13,7 @@ import { metricsFor } from '@/lib/grid';
  * made once on the phone and kept in the cache folder; the grid shows it instead. Not available on web (full image).
  */
 /** Master switch (for comparing with and without): false makes no thumbnails and shows the original images. Copies already on the phone are ignored. */
-export const THUMBNAILS_ENABLED = false;
+export const THUMBNAILS_ENABLED = true;
 export const thumbsSupported = Platform.OS !== 'web' && THUMBNAILS_ENABLED;
 
 /** The size tiles ask for, rounded up to 100 px (same rule as `artworkSized`). */
