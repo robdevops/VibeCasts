@@ -146,6 +146,10 @@ export function LibraryGrid({ keys, folderId, layout, canReorder, refreshing, on
       onDragFinish={onDragFinish}
       onVisibleChange={onVisibleChange}
       itemVersion={itemVersion}
+      flightInfo={(item) => {
+        const sub = view.subscriptions[parseKey(item.key).id];
+        return sub ? { uri: sub.podcast.artwork, title: sub.podcast.title } : undefined;
+      }}
       renderItem={(item, size) => {
         const { id } = parseKey(item.key);
         if (item.kind === 'folder') {

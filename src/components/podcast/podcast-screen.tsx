@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -13,6 +13,7 @@ import {
   Share,
   StyleSheet,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -39,8 +40,8 @@ import { toRef, type EpisodeRef } from '@/lib/playlist';
 import { usePlaylists } from '@/store/playlists';
 import { requestNotificationPermission } from '@/notifications/platform';
 import { downloadsSupported, useDownloads } from '@/downloads/download-manager';
-import { ZoomOutFrame } from '@/components/ui/zoom-out-frame';
 import { useFeeds } from '@/store/feeds';
+import { useFlight } from '@/store/flight';
 import { useLibrary } from '@/store/library';
 import { useToast } from '@/store/toast';
 
@@ -90,6 +91,31 @@ export default function PodcastScreen() {
   // Switching to the (short) bookmarks list must not make the page jump back to the top: hold the
   // scroll range open (current offset + one screen) while it is showing.
   const scrollY = useRef(0);
+
+  // The artwork flies between the grid tile and this artwork (see `store/flight.ts`): hidden here while it is in the air.
+  const navigation = useNavigation();
+  const { height: windowHeight } = useWindowDimensions();
+  const flightKey = `podcast:${id}`;
+  const hideArt = useFlight((s) => s.key === flightKey && (s.phase === 'opening' || s.phase === 'closing'));
+  const artRef = useRef<View>(null);
+  const artAt = useRef<{ x: number; y: number; size: number } | null>(null); // where the artwork was when the page was laid out
+  const reportArt = () =>
+    artRef.current?.measureInWindow((x, y, w) => {
+      artAt.current = { x, y, size: w };
+      useFlight.getState().setTarget(flightKey, { x, y, size: w });
+    });
+  useEffect(() => {
+    const nav = navigation as unknown as { addListener(e: string, cb: () => void): () => void };
+    // Closing: fly the artwork back to its tile, unless this page was scrolled so the artwork is out of view. Worked out
+    // from the last known position and the scroll offset, right now: the view may already be gone by the time an
+    // asynchronous measurement would answer.
+    return nav.addListener('beforeRemove', () => {
+      const at = artAt.current;
+      const y = at ? at.y - scrollY.current : 0;
+      useFlight.getState().close(flightKey, at && y + at.size > 0 && y < windowHeight ? { x: at.x, y, size: at.size } : null);
+    });
+  }, [navigation, flightKey, windowHeight]);
+
   const viewportH = useRef(0);
   const [holdHeight, setHoldHeight] = useState(0);
   const switchTab = (next: 'episodes' | 'bookmarks') => {
@@ -314,7 +340,9 @@ export default function PodcastScreen() {
           locations={[0, 0.92]}
           style={StyleSheet.absoluteFill}
         />
-        <Artwork uri={podcast.artwork} title={podcast.title} size={128} radius={14} style={styles.heroArt} />
+        <View ref={artRef} collapsable={false} onLayout={reportArt} style={{ opacity: hideArt ? 0 : 1 }}>
+          <Artwork uri={podcast.artwork} title={podcast.title} size={128} radius={14} style={styles.heroArt} />
+        </View>
         <Pressable accessibilityRole="button" accessibilityState={{ expanded: aboutOpen }} onPress={() => setAboutOpen((v) => !v)} style={styles.titleRow}>
           <ThemedText type="subtitle" style={styles.title} accessibilityRole="header">
             {podcast.title}
@@ -434,7 +462,6 @@ export default function PodcastScreen() {
   );
 
   return (
-    <ZoomOutFrame originKey={`podcast:${id}`}>
     <ThemedView style={styles.fill}>
       <FlatList
         data={tab === 'episodes' ? shown : []}
@@ -523,7 +550,6 @@ export default function PodcastScreen() {
         }}
       />
     </ThemedView>
-    </ZoomOutFrame>
   );
 }
 
