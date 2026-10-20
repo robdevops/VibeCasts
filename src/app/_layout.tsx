@@ -2,10 +2,11 @@ import * as Notifications from 'expo-notifications';
 import { DarkTheme, DefaultTheme, router, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
-import { useColorScheme } from 'react-native';
+import { AppState, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { ToastHost } from '@/components/ui/toast-host';
+import { flushAllWrites } from '@/db/writer';
 import { PlayerSheet } from '@/components/player/player-sheet';
 import { startDownloadAutomation } from '@/downloads/auto';
 import { registerAutoDownloadTask } from '@/downloads/background';
@@ -37,10 +38,15 @@ export default function RootLayout() {
       if (d?.podcastId && d.episodeId) router.push({ pathname: '/episode', params: { podcastId: d.podcastId, episodeId: d.episodeId } });
     });
     void useDownloads.getState().hydrate();
+    // Stores batch their writes; save everything as soon as the app leaves the foreground.
+    const flush = AppState.addEventListener('change', (state) => state !== 'active' && flushAllWrites());
     void usePlaylists.getState().hydrate();
     // Settings first: the player restores with the saved playback speed.
     void useSettings.getState().hydrate().then(() => usePlayer.getState().hydrate());
-    return () => tap.remove();
+    return () => {
+      tap.remove();
+      flush.remove();
+    };
   }, []);
 
   // Keep the native splash up until the saved library has loaded, then show the app (never longer than 3 s).

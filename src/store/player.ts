@@ -66,6 +66,8 @@ type Deps = {
 const STORAGE_KEY = 'player.v1';
 /** How often (in played seconds) progress is written to the library while playing. */
 const SAVE_EVERY_SEC = 5;
+/** With the screen off nobody is watching, so progress is saved less often (fewer JS wake-ups and writes). */
+const BACKGROUND_SAVE_EVERY_SEC = 20;
 /** How long a load or recovery may take to reach the expected position before it is retried. */
 const LOAD_GRACE_MS = 15_000;
 /** After pressing play on a loaded episode, how long to wait for any sign of life from the player. */
@@ -381,7 +383,7 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
       }
       if (prevPlaying && !s.playing) lastPauseAt = now();
       checkSleep();
-      if ((prevPlaying && !s.playing) || (s.playing && Math.abs(s.positionSec - lastSavedSec) >= SAVE_EVERY_SEC)) {
+      if ((prevPlaying && !s.playing) || (s.playing && Math.abs(s.positionSec - lastSavedSec) >= (visible ? SAVE_EVERY_SEC : BACKGROUND_SAVE_EVERY_SEC))) {
         saveProgress();
       }
     });

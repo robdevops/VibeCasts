@@ -3,6 +3,7 @@ import { Platform, StyleSheet, TextInput, View } from 'react-native';
 
 import { EmptyLibrary } from '@/components/podcasts/empty-library';
 import { LibraryGrid } from '@/components/podcasts/library-grid';
+import { TileSkeleton } from '@/components/podcasts/tile-skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconButton } from '@/components/ui/icon-button';
@@ -151,7 +152,9 @@ export default function PodcastsScreen() {
           refreshing={refreshing}
           onRefresh={refresh}
           empty={
-            searching ? (
+            !libraryReady ? (
+              <TileSkeleton />
+            ) : searching ? (
               <EmptyLibrary message="No matching podcasts" showStarter={false} />
             ) : (
               <EmptyLibrary message="No podcasts yet" />

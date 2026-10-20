@@ -68,3 +68,9 @@ Node 24 (`.nvmrc`), Xcode (iOS Simulator), Android Studio (AVD). `npx expo start
 - Playing / Details / Bookmarks live in `TabPager` (`player/tab-pager.tsx`): panels side by side that follow the finger; `SwipeIgnore` (measured relative to the pager) keeps the seek bar's own drag.
 - Podcast page: tapping Bookmarks holds the scroll range open (`holdHeight`) so the page doesn't jump to the top.
 - The mini player and the full player are one overlay (`PlayerSheet`): at rest it is the strip above the tab bar (`MiniPlayer` in the tab bar is an invisible placeholder that reserves the space and reports its position via `setMiniLayout`); dragging it up slides the card to fill the screen, dragging the header or art area down returns it to mini form. The header's underline and labels follow the pager's live offset (`pagerX`), and a flick moves one tab at most.
+
+## Performance and caching
+- Persisted stores write through `db/writer.ts` (`createWriter`): bursts are coalesced, progress-only library changes wait 2.5 s, the feed cache 3 s, and `flushAllWrites()` runs when the app leaves the foreground (root `_layout`). Don't write storage directly from a store subscription.
+- Bulk and background feed refreshes are conditional (`refresh(podcast, { conditional: true })`): the saved ETag / Last-Modified is sent and a 304 (`FeedNotModified`) keeps the cache and just resets its age. Opening a page, pull to refresh and the notes fetch always do a full fetch (they need the whole feed in memory). Native only; web goes through the proxy.
+- `library.countsVersion` changes only when played/archived does, so the Podcasts grid's unplayed counts (`useLibraryView`) don't recompute on every progress save. While backgrounded, playback progress is saved every 20 s instead of 5 s.
+- The Podcasts grid shows `TileSkeleton` until the library has loaded, never "No podcasts yet".
