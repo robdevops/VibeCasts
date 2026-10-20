@@ -2,6 +2,7 @@ import { Image } from 'expo-image';
 import { useMemo } from 'react';
 import { PixelRatio, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
+import { tileThumbPx, useThumb } from '@/artwork/thumbs';
 import { artworkSized } from '@/lib/artwork';
 import { markShown, wasShown } from '@/lib/shown-images';
 
@@ -18,9 +19,15 @@ type Props = { uri?: string; title: string; size?: number; radius?: number; styl
 /** Square podcast artwork with a coloured initial as the fallback. */
 export function Artwork({ uri, title, size, radius = 10, style }: Props) {
   // Tiles fill their column (no fixed size): ~110 pt on a phone.
-  const source = uri ? artworkSized(uri, (size ?? 120) * PixelRatio.get()) : undefined;
-  // An image that was already shown this session appears at once (no fade over the placeholder).
-  const known = wasShown(source);
+  const wantPx = (size ?? 120) * PixelRatio.get();
+  const full = uri ? artworkSized(uri, wantPx) : undefined;
+  // A tile-sized copy made on the phone (hosts that can't resize by URL): far quicker to decode than a 2000 px original.
+  const thumbPx = tileThumbPx();
+  const thumb = useThumb(uri, thumbPx);
+  const source = thumb && wantPx <= thumbPx ? thumb : full;
+  // An image that was already shown this session appears at once (no fade over the placeholder), including when the
+  // tile-sized copy takes over from the full image.
+  const known = wasShown(source) || wasShown(full);
   const imageSource = useMemo(() => ({ uri: source }), [source]);
   const dim = size ? { width: size, height: size } : { width: '100%' as const, aspectRatio: 1 };
   return (
