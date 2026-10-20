@@ -300,17 +300,12 @@ export function TileGrid({
     [],
   );
   const dragging = activeKey !== null;
-  // The first and last rows stay mounted whatever the scroll position, so a jump to the top or the bottom is instant.
-  const pinnedTiles = PINNED_ROWS * m.cols;
-  const pinned = (index: number) => index < pinnedTiles || index >= items.length - pinnedTiles;
 
   return (
     <View style={styles.fill} onLayout={onLayout}>
       <ScrollView
         ref={scrollRef}
         scrollEnabled={!dragging}
-        // Android detaches off-screen children and can fail to bring the always-mounted first/last rows back (they stayed blank).
-        removeClippedSubviews={false}
         scrollEventThrottle={16}
         onScroll={(e) => {
           scrollNow.current = e.nativeEvent.contentOffset.y;
@@ -324,7 +319,7 @@ export function TileGrid({
             {items.map((item, natural) => {
               const key = item.key;
               const index = slotOf.get(key) ?? natural;
-              if ((index < win.start || index >= win.end) && !pinned(index) && key !== activeKey) return null;
+              if ((index < win.start || index >= win.end) && key !== activeKey) return null;
               return (
                 <Cell
                   key={key}
@@ -485,7 +480,6 @@ function CellBase({ item, index, m, active, highlighted, draggable, scrollY, onP
 
 /** How long a dragged podcast must rest on a folder's edge before the folder makes way. */
 const DWELL_MS = 350;
-const PINNED_ROWS = 5;
 
 const styles = StyleSheet.create({
   fill: { flex: 1, zIndex: 10 },
