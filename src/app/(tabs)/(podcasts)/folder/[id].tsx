@@ -1,6 +1,7 @@
-import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { router, useLocalSearchParams, useNavigation } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { EmptyLibrary } from '@/components/podcasts/empty-library';
 import { LibraryGrid } from '@/components/podcasts/library-grid';
@@ -11,6 +12,7 @@ import { MenuSheet } from '@/components/ui/menu-sheet';
 import { NamePrompt } from '@/components/ui/name-prompt';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { useTheme } from '@/hooks/use-theme';
+import { FOLDER_ZOOM, getZoomOrigin, ZOOM_MS } from '@/lib/folder-zoom';
 import { useFeeds } from '@/store/feeds';
 import { useLibrary } from '@/store/library';
 
@@ -24,6 +26,36 @@ export default function FolderScreen() {
   const [menu, setMenu] = useState(false);
   const [rename, setRename] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Leaving: the whole page shrinks (and fades) into the folder tile it was opened from.
+  const navigation = useNavigation();
+  const rootRef = useRef<View>(null);
+  const frame = useRef({ x: 0, y: 0, w: 1 });
+  const exit = useSharedValue(0);
+  const originX = useSharedValue(0);
+  const originY = useSharedValue(0);
+  const endScale = useSharedValue(1);
+  const measure = () => rootRef.current?.measureInWindow((x, y, w) => (frame.current = { x, y, w: w || 1 }));
+  useEffect(() => {
+    if (!FOLDER_ZOOM) return;
+    const unsubscribe = (navigation as unknown as { addListener(e: string, cb: (ev: { data?: { closing?: boolean } }) => void): () => void }).addListener(
+      'transitionStart',
+      (e) => {
+        if (!e.data?.closing) return;
+        const o = getZoomOrigin();
+        if (!o) return;
+        originX.set(o.x - frame.current.x);
+        originY.set(o.y - frame.current.y);
+        endScale.set(Math.max(0.05, o.size / frame.current.w));
+        exit.set(withTiming(1, { duration: ZOOM_MS }));
+      },
+    );
+    return unsubscribe;
+  }, [navigation, exit, originX, originY, endScale]);
+  const shrinkStyle = useAnimatedStyle(() => {
+    const p = exit.get();
+    return { opacity: 1 - p * 0.6, transform: [{ scale: 1 + p * (endScale.get() - 1) }], transformOrigin: [originX.get(), originY.get(), 0] };
+  });
 
   const keys = useMemo(() => (order ?? []).filter((p) => subscriptions[p]).map((p) => `p:${p}`), [order, subscriptions]);
 
@@ -43,6 +75,7 @@ export default function FolderScreen() {
   }
 
   return (
+    <Animated.View ref={rootRef} onLayout={measure} style={[styles.fill, shrinkStyle]}>
     <ThemedView style={styles.fill}>
       <ScreenHeader
         title={folder.name}
@@ -99,6 +132,7 @@ export default function FolderScreen() {
         }}
       />
     </ThemedView>
+    </Animated.View>
   );
 }
 
