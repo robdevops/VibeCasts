@@ -22,13 +22,16 @@ type Props = {
   refreshing: boolean;
   onRefresh: () => void;
   empty: ReactNode;
+  onDragBegin?: (key: string) => void;
+  onDragFinish?: () => void;
+  onVisibleChange?: (range: { start: number; end: number }) => void;
 };
 
 /** The tile/list view shared by the Podcasts tab and folder pages. */
-export function LibraryGrid({ keys, folderId, layout, canReorder, refreshing, onRefresh, empty }: Props) {
+export function LibraryGrid({ keys, folderId, layout, canReorder, refreshing, onRefresh, empty, onDragBegin, onDragFinish, onVisibleChange }: Props) {
   const theme = useTheme();
   const view = useLibraryView();
-  const { setHomeOrder, setFolderOrder, moveToFolder, removeFromFolder, unsubscribe, deleteFolder } = useLibrary.getState();
+  const { placeInHome, setFolderOrder, moveToFolder, removeFromFolder, unsubscribe, deleteFolder } = useLibrary.getState();
 
   const items = useMemo<GridItem[]>(
     () => keys.map((key) => ({ key, kind: parseKey(key).type })),
@@ -64,9 +67,9 @@ export function LibraryGrid({ keys, folderId, layout, canReorder, refreshing, on
   const onReorder = useCallback(
     (next: string[]) => {
       if (folderId) setFolderOrder(folderId, next.map((k) => parseKey(k).id));
-      else setHomeOrder(next);
+      else placeInHome(next);
     },
-    [folderId, setFolderOrder, setHomeOrder],
+    [folderId, setFolderOrder, placeInHome],
   );
 
   const onDropIntoFolder = useCallback(
@@ -126,6 +129,9 @@ export function LibraryGrid({ keys, folderId, layout, canReorder, refreshing, on
       refreshing={refreshing}
       onRefresh={onRefresh}
       empty={empty}
+      onDragBegin={onDragBegin}
+      onDragFinish={onDragFinish}
+      onVisibleChange={onVisibleChange}
       renderItem={(item, size) => {
         const { id } = parseKey(item.key);
         if (item.kind === 'folder') {

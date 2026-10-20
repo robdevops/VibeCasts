@@ -136,3 +136,32 @@ describe('countsVersion (unplayed counts only need to refresh when played/archiv
     expect(s.getState().countsVersion).toBe(v0 + 2);
   });
 });
+
+describe('placeInHome (dragging a podcast out of a folder, or up from search, into the main order)', () => {
+  it('sets the home order and releases folder membership for podcasts placed in it', () => {
+    const s = createLibraryStore(createMemoryKV());
+    s.getState().subscribe(pod('1'));
+    s.getState().subscribe(pod('2'));
+    s.getState().subscribe(pod('3'));
+    const f = s.getState().createFolder('News', '#fff');
+    s.getState().moveToFolder('2', f);
+    expect(s.getState().homeOrder).toEqual(['p:1', 'p:3', `f:${f}`]);
+
+    s.getState().placeInHome(['p:1', 'p:2', 'p:3', `f:${f}`]);
+    expect(s.getState().homeOrder).toEqual(['p:1', 'p:2', 'p:3', `f:${f}`]);
+    expect(s.getState().subscriptions['2'].folderId).toBeUndefined();
+    expect(s.getState().folderOrder[f]).toEqual([]);
+    expect(s.getState().sort).toBe('custom');
+  });
+
+  it('leaves podcasts that stay in their folders alone', () => {
+    const s = createLibraryStore(createMemoryKV());
+    s.getState().subscribe(pod('1'));
+    s.getState().subscribe(pod('2'));
+    const f = s.getState().createFolder('X', '#000');
+    s.getState().moveToFolder('2', f);
+    s.getState().placeInHome([`f:${f}`, 'p:1']);
+    expect(s.getState().subscriptions['2'].folderId).toBe(f);
+    expect(s.getState().folderOrder[f]).toEqual(['2']);
+  });
+});
