@@ -22,7 +22,7 @@ export type GridItem = { key: string; kind: 'podcast' | 'folder' };
 
 type Props = {
   items: GridItem[];
-  renderItem: (item: GridItem, size: number, low: boolean) => ReactNode;
+  renderItem: (item: GridItem, size: number) => ReactNode;
   /**
    * A value that changes when what a tile shows changes (title, art, badge...). Tiles re-render only
    * when their slot, drag state or this version changes, not on every scroll or reorder.
@@ -92,8 +92,6 @@ export function TileGrid({
   const [overRemove, setOverRemove] = useState(false);
   // Only tiles in (or near) view are mounted; [start, end) are indexes into the displayed order.
   const [win, setWin] = useState({ start: 0, end: 60 });
-  // The tiles on or near the screen get sharp art; the rest of the mounted ones show the smallest version (less memory).
-  const [near, setNear] = useState({ start: 0, end: 60 });
 
   const drag = useRef<Drag | null>(null);
   const orderRef = useRef<string[]>([]);
@@ -119,14 +117,11 @@ export function TileGrid({
   const updateWindow = useCallback(
     (y: number) => {
       const next = visibleRange(y, viewportH.current || windowHeight, m, items.length);
-      // Mount well ahead of the screen (10 rows) so a moderate scroll doesn't outrun the tiles being mounted; the ones
-      // beyond `next` use the small artwork. Keep recently visible tiles mounted (only let go of far-away ones).
-      const ahead = visibleRange(y, viewportH.current || windowHeight, m, items.length, 10);
+      // Keep recently visible tiles mounted (only let go of far-away ones): remounting makes art flash.
       setWin((w) => {
-        const merged = mountedRange(w, ahead, m.cols);
+        const merged = mountedRange(w, next, m.cols);
         return merged.start === w.start && merged.end === w.end ? w : merged;
       });
-      setNear((n) => (n.start === next.start && n.end === next.end ? n : next));
       if (next.start !== lastRange.current.start || next.end !== lastRange.current.end) {
         lastRange.current = next;
         visibleCb.current?.(next);
@@ -300,7 +295,7 @@ export function TileGrid({
       onDragStart: (key: string, left: number, top: number) => latest.current.onDragStart(key, left, top),
       onDragMove: (tx: number, ty: number, absY: number) => latest.current.onDragMove(tx, ty, absY),
       onDragEnd: () => latest.current.onDragEnd(),
-      renderItem: (item: GridItem, size: number, low: boolean) => latest.current.renderItem(item, size, low),
+      renderItem: (item: GridItem, size: number) => latest.current.renderItem(item, size),
     }),
     [],
   );
@@ -340,7 +335,6 @@ export function TileGrid({
                   onDragMove={stable.onDragMove}
                   onDragEnd={stable.onDragEnd}
                   renderItem={stable.renderItem}
-                  low={(index < near.start || index >= near.end) && key !== activeKey}
                   version={itemVersion ? itemVersion(item) : 0}
                 />
               );
@@ -380,9 +374,8 @@ type CellProps = {
   onDragStart: (key: string, left: number, top: number) => void;
   onDragMove: (tx: number, ty: number, absY: number) => void;
   onDragEnd: () => void;
-  renderItem: (item: GridItem, size: number, low: boolean) => ReactNode;
+  renderItem: (item: GridItem, size: number) => ReactNode;
   version: string | number;
-  low: boolean;
 };
 
 /** Re-render a tile only when something it shows or does has changed. */
@@ -398,7 +391,6 @@ const sameCell = (a: CellProps, b: CellProps) =>
   a.highlighted === b.highlighted &&
   a.draggable === b.draggable &&
   a.version === b.version &&
-  a.low === b.low &&
   a.scrollY === b.scrollY &&
   a.onPress === b.onPress &&
   a.onDragStart === b.onDragStart &&
@@ -407,7 +399,7 @@ const sameCell = (a: CellProps, b: CellProps) =>
 
 const Cell = memo(CellBase, sameCell);
 
-function CellBase({ item, index, m, active, highlighted, draggable, scrollY, onPress, onDragStart, onDragMove, onDragEnd, renderItem, low }: CellProps) {
+function CellBase({ item, index, m, active, highlighted, draggable, scrollY, onPress, onDragStart, onDragMove, onDragEnd, renderItem }: CellProps) {
   const rect = slotRect(index, m);
   const x = useSharedValue(rect.left);
   const y = useSharedValue(rect.top);
@@ -481,7 +473,7 @@ function CellBase({ item, index, m, active, highlighted, draggable, scrollY, onP
 
   return (
     <GestureDetector gesture={gesture}>
-      <Animated.View style={[styles.cell, { width: m.tile, height: m.tile }, style]}>{renderItem(item, m.tile, low)}</Animated.View>
+      <Animated.View style={[styles.cell, { width: m.tile, height: m.tile }, style]}>{renderItem(item, m.tile)}</Animated.View>
     </GestureDetector>
   );
 }

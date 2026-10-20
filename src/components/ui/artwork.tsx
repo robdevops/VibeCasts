@@ -2,8 +2,7 @@ import { Image } from 'expo-image';
 import { useMemo } from 'react';
 import { PixelRatio, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { useThumb } from '@/artwork/thumbs';
-import { artworkLow, artworkSized } from '@/lib/artwork';
+import { artworkSized } from '@/lib/artwork';
 import { markShown, wasShown } from '@/lib/shown-images';
 
 const PALETTE = ['#E8A33D', '#5B8DEF', '#4CBF8B', '#C468D6', '#EF6C6C', '#4DB6C9', '#8A8D93'];
@@ -14,15 +13,12 @@ function colorFor(seed: string) {
   return PALETTE[Math.abs(h) % PALETTE.length];
 }
 
-type Props = { uri?: string; title: string; size?: number; radius?: number; style?: StyleProp<ViewStyle>; /** Use the smallest version (a tile that is off screen). */ low?: boolean };
+type Props = { uri?: string; title: string; size?: number; radius?: number; style?: StyleProp<ViewStyle> };
 
 /** Square podcast artwork with a coloured initial as the fallback. */
-export function Artwork({ uri, title, size, radius = 10, style, low = false }: Props) {
+export function Artwork({ uri, title, size, radius = 10, style }: Props) {
   // Tiles fill their column (no fixed size): ~110 pt on a phone.
-  // The smallest version: a URL edit for iTunes art, a thumbnail made on the phone for other hosts (until it exists, none).
-  const thumb = useThumb(uri);
-  const lowSource = uri ? (thumb ?? (artworkLow(uri) !== uri ? artworkLow(uri) : undefined)) : undefined;
-  const source = uri ? (low && lowSource ? lowSource : artworkSized(uri, (size ?? 120) * PixelRatio.get())) : undefined;
+  const source = uri ? artworkSized(uri, (size ?? 120) * PixelRatio.get()) : undefined;
   // An image that was already shown this session appears at once (no fade over the placeholder).
   const known = wasShown(source);
   const imageSource = useMemo(() => ({ uri: source }), [source]);
@@ -39,10 +35,7 @@ export function Artwork({ uri, title, size, radius = 10, style, low = false }: P
             recyclingKey={source}
             style={StyleSheet.absoluteFill}
             contentFit="cover"
-            // While the sharp version loads, the small one (already cached) stands in.
-            placeholder={!(low && lowSource) && lowSource && lowSource !== source ? { uri: lowSource } : undefined}
-            placeholderContentFit="cover"
-            transition={known || (low && !!lowSource) ? 0 : 150}
+            transition={known ? 0 : 150}
             onLoad={() => source && markShown(source)}
             accessibilityIgnoresInvertColors
           />
