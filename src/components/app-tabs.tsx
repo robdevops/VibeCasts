@@ -62,8 +62,8 @@ function TabButton({ children, icon, isFocused, ...props }: TabTriggerSlotProps 
 
 const styles = StyleSheet.create({
   slot: { flex: 1 },
-  bar: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 8 },
+  bar: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 12 },
   row: { flexDirection: 'row' },
-  button: { flex: 1, alignItems: 'center', gap: 2, paddingTop: 10, paddingBottom: 6 },
+  button: { flex: 1, alignItems: 'center', gap: 2, paddingTop: 14, paddingBottom: 6 },
   label: { fontSize: 12, lineHeight: 16 },
 });

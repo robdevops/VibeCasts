@@ -1,3 +1,4 @@
+import { usePathname } from 'expo-router';
 import { useEffect } from 'react';
 import { BackHandler, StyleSheet, useWindowDimensions } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
@@ -19,6 +20,9 @@ export function PlayerSheet() {
   const open = usePlayerSheet((s) => s.open);
   const { height } = useWindowDimensions();
   const drag = usePlayerSheetDrag();
+  // Browsing another episode (the /episode screen) has its own play button at the bottom: the mini
+  // player would sit on top of it, so it steps out of the way until you come back.
+  const hidden = usePathname() === '/episode' && !open;
 
   // The card's top edge: the mini player's spot at progress 0, the top of the screen at 1.
   const card = useAnimatedStyle(() => ({ transform: [{ translateY: (miniTop.get() || height) * (1 - sheetProgress.get()) }] }));
@@ -46,7 +50,7 @@ export function PlayerSheet() {
 
   if (!hasCurrent) return null;
   return (
-    <Animated.View pointerEvents="box-none" style={[styles.sheet, card]}>
+    <Animated.View pointerEvents={hidden ? 'none' : 'box-none'} style={[styles.sheet, card, hidden ? styles.hidden : null]}>
       <Animated.View pointerEvents={open ? 'auto' : 'none'} style={[styles.body, body]}>
         <EpisodeView onClose={closePlayerSheet} sheet />
       </Animated.View>
@@ -63,4 +67,5 @@ const styles = StyleSheet.create({
   sheet: { position: 'absolute', left: 0, right: 0, top: 0, height: '100%', zIndex: 100 },
   body: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 },
   strip: { position: 'absolute', left: 0, right: 0, top: 0 },
+  hidden: { opacity: 0 },
 });
