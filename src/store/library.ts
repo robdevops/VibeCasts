@@ -5,7 +5,7 @@ import { kv } from '@/db/kv';
 import type { KV } from '@/db/storage';
 import { createWriter } from '@/db/writer';
 import { emptyEpisodeState, episodeKey, type EpisodeState } from '@/lib/episode-state';
-import { tileKey, type TileRef } from '@/lib/layout';
+import { parseKey, tileKey, type TileRef } from '@/lib/layout';
 import { normalizeFeedUrl, type OpmlFeed } from '@/lib/opml';
 import { rssPodcastId } from '@/lib/podcast-id';
 import type { PodcastSort } from '@/lib/podcast-sort';
@@ -68,6 +68,8 @@ type Actions = {
   moveToFolder(podcastId: string, folderId: string): void;
   removeFromFolder(podcastId: string): void;
   setHomeOrder(keys: string[]): void;
+  /** Set the home order, taking any podcast listed in it out of the folder it was in (a podcast dragged out of a folder, or up from search). */
+  placeInHome(keys: string[]): void;
   setFolderOrder(folderId: string, ids: string[]): void;
   renameFolder(folderId: string, name: string, color?: string): void;
   patchEpisode(episodeKey: string, patch: Partial<EpisodeState>): void;
@@ -264,6 +266,21 @@ export function createLibraryStore(storage: KV = kv) {
     },
 
     setHomeOrder: (keys) => set({ homeOrder: keys, sort: 'custom' }),
+
+    placeInHome(keys) {
+      set((s) => {
+        const subscriptions = { ...s.subscriptions };
+        const folderOrder = { ...s.folderOrder };
+        for (const key of keys) {
+          const { type, id } = parseKey(key);
+          const sub = type === 'podcast' ? subscriptions[id] : undefined;
+          if (!sub?.folderId) continue;
+          folderOrder[sub.folderId] = (folderOrder[sub.folderId] ?? []).filter((x) => x !== id);
+          subscriptions[id] = { ...sub, folderId: undefined };
+        }
+        return { subscriptions, folderOrder, homeOrder: keys, sort: 'custom' };
+      });
+    },
     setFolderOrder: (folderId, ids) => set((s) => ({ folderOrder: { ...s.folderOrder, [folderId]: ids } })),
     renameFolder(folderId, name, color) {
       set((s) => {

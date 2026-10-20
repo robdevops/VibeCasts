@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Platform, StyleSheet, TextInput, View } from 'react-native';
+import { useIsFocused } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Keyboard, Platform, StyleSheet, TextInput, View } from 'react-native';
 
 import { EmptyLibrary } from '@/components/podcasts/empty-library';
 import { LibraryGrid } from '@/components/podcasts/library-grid';
@@ -10,12 +11,17 @@ import { IconButton } from '@/components/ui/icon-button';
 import { MenuSheet, type MenuItem } from '@/components/ui/menu-sheet';
 import { NamePrompt } from '@/components/ui/name-prompt';
 import { ScreenHeader } from '@/components/ui/screen-header';
+import { useAppActive } from '@/hooks/use-app-active';
 import { useLibraryView } from '@/hooks/use-library-view';
 import { useTheme } from '@/hooks/use-theme';
+import { displayOrder } from '@/lib/display-order';
 import { parseKey } from '@/lib/layout';
+import { prefetchTileArtwork } from '@/lib/prefetch-artwork';
+import { searchPodcasts } from '@/lib/search';
 import { SORT_LABELS, sortTiles, type PodcastSort, type SortableTile } from '@/lib/podcast-sort';
 import { useFeeds } from '@/store/feeds';
 import { useLibrary } from '@/store/library';
+import { useToast } from '@/store/toast';
 
 export default function PodcastsScreen() {
   const theme = useTheme();
@@ -38,11 +44,12 @@ export default function PodcastsScreen() {
   // Fetch feeds that are missing or stale once storage has loaded, and when new shows are added.
   useEffect(() => {
     if (!libraryReady || !feedsReady) return;
-    // Shows imported from a file get their artwork and details first, then the rest refresh.
+    // Shows imported from a file get their artwork and details first, then the rest refresh. Both go
+    // nearest the viewport first, and only while the phone is unlocked and this tab is showing.
     void useFeeds
       .getState()
-      .backfill(podcasts)
-      .then(() => useFeeds.getState().refreshAll(podcasts.filter((p) => !p.needsMeta), { onlyStale: true }));
+      .backfill(podcasts, { whileLooking: true })
+      .then(() => useFeeds.getState().refreshAll(podcasts.filter((p) => !p.needsMeta), { onlyStale: true, whileLooking: true }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [libraryReady, feedsReady, podcastIds]);
 
@@ -53,15 +60,11 @@ export default function PodcastsScreen() {
   }, [podcasts]);
 
   const searching = query !== null && query.trim().length > 0;
+  // A search result being dragged: the grid shows the whole library so it can be placed anywhere.
+  const [dragFromSearch, setDragFromSearch] = useState<string | null>(null);
+  const [visibleStart, setVisibleStart] = useState(0);
 
-  const keys = useMemo(() => {
-    if (searching) {
-      const q = (query ?? '').trim().toLowerCase();
-      return Object.values(view.subscriptions)
-        .filter((s) => s.podcast.title.toLowerCase().includes(q) || s.podcast.author.toLowerCase().includes(q))
-        .sort((a, b) => a.podcast.title.localeCompare(b.podcast.title))
-        .map((s) => `p:${s.podcast.id}`);
-    }
+  const mainKeys = useMemo(() => {
     const tiles: SortableTile[] = homeOrder.map((key) => {
       const { type, id } = parseKey(key);
       if (type === 'folder') {
@@ -72,7 +75,67 @@ export default function PodcastsScreen() {
       return { key, name: s?.podcast.title ?? '', added: s?.subscribedAt ?? 0, latest: view.latest[id] ?? 0 };
     });
     return sortTiles(tiles, sort);
-  }, [searching, query, homeOrder, sort, view]);
+  }, [homeOrder, sort, view]);
+
+  const searchKeys = useMemo(
+    () =>
+      // Matches at the start of a word in the title or author ("me" finds Metaverse, not Games).
+      searchPodcasts(
+        Object.values(view.subscriptions).map((s) => s.podcast),
+        query ?? '',
+      ).map((id) => `p:${id}`),
+    [view.subscriptions, query],
+  );
+
+  const keys = useMemo(() => {
+    if (dragFromSearch) {
+      // A podcast that lives inside a folder has no tile of its own: show it as an extra one while it is dragged.
+      return mainKeys.includes(dragFromSearch) ? mainKeys : [...mainKeys, dragFromSearch];
+    }
+    return searching ? searchKeys : mainKeys;
+  }, [dragFromSearch, searching, searchKeys, mainKeys]);
+
+  const onDragBegin = (key: string) => {
+    if (!searching) return;
+    Keyboard.dismiss();
+    setDragFromSearch(key);
+    if (sort !== 'custom') useToast.getState().show('Switch Sort to Custom to rearrange. You can still drop it on a folder.');
+  };
+  const onDragFinish = () => {
+    if (dragFromSearch === null) return;
+    // Done placing it: close the search so the library shows where it landed.
+    setDragFromSearch(null);
+    setQuery(null);
+  };
+
+  // Load what is on screen first, and only while the phone is unlocked with this tab showing.
+  const focused = useIsFocused();
+  const appActive = useAppActive();
+  const looking = focused && appActive;
+  useEffect(() => {
+    useFeeds.getState().setLooking(looking);
+    return () => useFeeds.getState().setLooking(false);
+  }, [looking]);
+
+  const priority = useMemo(
+    () => displayOrder(mainKeys, view.folderOrder, { from: searching && !dragFromSearch ? 0 : visibleStart }),
+    [mainKeys, view.folderOrder, searching, dragFromSearch, visibleStart],
+  );
+  useEffect(() => {
+    useFeeds.getState().setPriority(priority);
+  }, [priority]);
+
+  // Warm the artwork of the tiles in the order they are shown (the first screenful first).
+  const priorityRef = useRef(priority);
+  useEffect(() => {
+    priorityRef.current = priority;
+  });
+  useEffect(() => {
+    if (!libraryReady || !looking) return;
+    const subs = useLibrary.getState().subscriptions;
+    const urls = priorityRef.current.map((id) => subs[id]?.podcast.artwork ?? '');
+    void prefetchTileArtwork(urls, { shouldContinue: () => useFeeds.getState().looking });
+  }, [libraryReady, looking, podcastIds]);
 
   const setSort = (s: PodcastSort) => {
     useLibrary.getState().setSort(s);
@@ -148,7 +211,10 @@ export default function PodcastsScreen() {
         <LibraryGrid
           keys={keys}
           layout={layout}
-          canReorder={sort === 'custom' && !searching}
+          canReorder={sort === 'custom' && (!searching || dragFromSearch !== null)}
+          onDragBegin={onDragBegin}
+          onDragFinish={onDragFinish}
+          onVisibleChange={(r) => setVisibleStart(r.start)}
           refreshing={refreshing}
           onRefresh={refresh}
           empty={
