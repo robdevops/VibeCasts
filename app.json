@@ -53,7 +53,7 @@
         "expo-notifications",
         {
           "icon": "./assets/images/notification-icon.png",
-          "color": "#F43E37"
+          "color": "#9B7BEA"
         }
       ],
       "expo-background-task",

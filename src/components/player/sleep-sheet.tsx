@@ -14,7 +14,7 @@ type Props = {
   onClose: () => void;
 };
 
-const ACCENT = '#FF5A52';
+const ACCENT = '#B79CFF';
 
 export function SleepSheet({ visible, sleep, now, onChoose, onClose }: Props) {
   const row = (label: string, selected: boolean, onPress: () => void) => (

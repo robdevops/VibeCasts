@@ -14,7 +14,7 @@ export function BottomSheet({ visible, title, onClose, children, dark }: Props) 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel={`Close ${title}`} />
-      <View style={[styles.sheet, { backgroundColor: dark ? '#2B1111' : theme.background, paddingBottom: insets.bottom + 20 }]}>
+      <View style={[styles.sheet, { backgroundColor: dark ? '#1E1433' : theme.background, paddingBottom: insets.bottom + 20 }]}>
         <ThemedText type="subtitle" style={[styles.title, dark ? { color: '#fff' } : null]}>
           {title}
         </ThemedText>

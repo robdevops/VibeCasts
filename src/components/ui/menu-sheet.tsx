@@ -34,7 +34,7 @@ export function MenuSheet({ visible, items, onClose, title, anchor = 'top', dark
         style={[
           styles.card,
           anchor === 'top' ? { top: topOffset, maxHeight } : { bottom: insets.bottom + 100, maxHeight: height - insets.top - insets.bottom - 140 },
-          { backgroundColor: dark ? '#2B1111' : theme.background, borderColor: dark ? 'rgba(255,255,255,0.15)' : theme.border },
+          { backgroundColor: dark ? '#1E1433' : theme.background, borderColor: dark ? 'rgba(255,255,255,0.15)' : theme.border },
         ]}>
         <ScrollView bounces={false} showsVerticalScrollIndicator={false}>
         {title ? (
@@ -56,10 +56,10 @@ export function MenuSheet({ visible, items, onClose, title, anchor = 'top', dark
               ]}>
               <View style={styles.iconSlot}>
                 {item.icon ? (
-                  <Icon name={item.icon} size={22} color={item.destructive ? theme.accent : theme.textSecondary} />
+                  <Icon name={item.icon} size={22} color={item.destructive ? theme.danger : theme.textSecondary} />
                 ) : null}
               </View>
-              <ThemedText style={{ flex: 1, color: item.destructive ? theme.accent : dark ? '#fff' : theme.text }}>{item.label}</ThemedText>
+              <ThemedText style={{ flex: 1, color: item.destructive ? theme.danger : dark ? '#fff' : theme.text }}>{item.label}</ThemedText>
               {item.checked ? <Icon name="check" size={20} color={theme.accent} /> : null}
             </Pressable>
           </View>
