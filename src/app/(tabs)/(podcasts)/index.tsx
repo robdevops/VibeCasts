@@ -21,7 +21,6 @@ import { searchPodcasts } from '@/lib/search';
 import { SORT_LABELS, sortTiles, type PodcastSort, type SortableTile } from '@/lib/podcast-sort';
 import { useFeeds } from '@/store/feeds';
 import { useLibrary } from '@/store/library';
-import { useToast } from '@/store/toast';
 
 export default function PodcastsScreen() {
   const theme = useTheme();
@@ -105,7 +104,6 @@ export default function PodcastsScreen() {
     if (!searching) return;
     Keyboard.dismiss();
     setDragFromSearch(key);
-    if (sort !== 'custom') useToast.getState().show('Switch Sort to Custom to rearrange. You can still drop it on a folder.');
   };
   const onDragFinish = () => {
     if (dragFromSearch === null) return;
@@ -242,7 +240,7 @@ export default function PodcastsScreen() {
         <LibraryGrid
           keys={keys}
           layout={layout}
-          canReorder={sort === 'custom' && (!searching || dragFromSearch !== null)}
+          canReorder={!searching || dragFromSearch !== null}
           onDragBegin={onDragBegin}
           onDragFinish={onDragFinish}
           onVisibleChange={onVisibleChange}

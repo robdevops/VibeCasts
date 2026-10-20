@@ -71,7 +71,7 @@ export function MenuSheet({ visible, items, onClose, title, anchor = 'top', dark
 }
 
 /** Space kept between a top-anchored menu and the bottom of the screen. */
-const BOTTOM_MARGIN = 32;
+const BOTTOM_MARGIN = 8;
 
 const styles = StyleSheet.create({
   card: {
