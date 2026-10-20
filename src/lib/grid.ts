@@ -69,8 +69,8 @@ export function mountedRange(
   prev: { start: number; end: number },
   next: { start: number; end: number },
   cols: number,
-  slackRows = 22,
-  maxTiles = 220,
+  slackRows = 21,
+  maxTiles = 210,
 ) {
   const slack = slackRows * cols;
   let start = prev.start < next.start - slack ? next.start : Math.min(prev.start, next.start);
