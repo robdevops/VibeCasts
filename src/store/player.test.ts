@@ -109,6 +109,15 @@ it('prefers the downloaded file over streaming', () => {
   expect(t.calls[0]).toContain('load file:///x.mp3');
 });
 
+it('pauses the current episode the moment another one is played', () => {
+  const t = setup();
+  t.player.getState().play(episode, podcast);
+  t.calls.length = 0;
+  t.player.getState().play({ ...episode, id: 'e2', audioUrl: 'https://b.mp3' }, podcast);
+  expect(t.calls[0]).toBe('pause');
+  expect(t.calls).toContain('load https://b.mp3 @0 x1');
+});
+
 it('toggles play/pause without reloading', () => {
   const t = setup();
   t.player.getState().play(episode, podcast);

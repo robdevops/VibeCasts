@@ -495,7 +495,11 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
           if (!get().playing) resumeLoaded();
           return;
         }
-        if (get().playing) saveProgress();
+        if (get().playing) {
+          // Silence the old episode at once; the new one may take a moment to load (or wait on a data prompt).
+          saveProgress();
+          get().pause();
+        }
         const state = library.getState().episodes[key] ?? emptyEpisodeState;
         const overrides = library.getState().subscriptions[podcast.id]?.overrides;
         // A finished episode replays from the top; otherwise pick up (a little early) where you were.
