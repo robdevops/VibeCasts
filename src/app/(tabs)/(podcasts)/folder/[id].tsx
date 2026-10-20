@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { EmptyLibrary } from '@/components/podcasts/empty-library';
 import { LibraryGrid } from '@/components/podcasts/library-grid';
@@ -12,7 +12,7 @@ import { MenuSheet } from '@/components/ui/menu-sheet';
 import { NamePrompt } from '@/components/ui/name-prompt';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { useTheme } from '@/hooks/use-theme';
-import { FOLDER_ZOOM, getZoomOrigin, ZOOM_MS } from '@/lib/folder-zoom';
+import { FOLDER_ZOOM, getZoomOrigin, SHRINK_MS } from '@/lib/folder-zoom';
 import { useFeeds } from '@/store/feeds';
 import { useLibrary } from '@/store/library';
 
@@ -38,19 +38,25 @@ export default function FolderScreen() {
   const measure = () => rootRef.current?.measureInWindow((x, y, w) => (frame.current = { x, y, w: w || 1 }));
   useEffect(() => {
     if (!FOLDER_ZOOM) return;
-    const unsubscribe = (navigation as unknown as { addListener(e: string, cb: (ev: { data?: { closing?: boolean } }) => void): () => void }).addListener(
-      'transitionStart',
-      (e) => {
-        if (!e.data?.closing) return;
-        const o = getZoomOrigin();
-        if (!o) return;
-        originX.set(o.x - frame.current.x);
-        originY.set(o.y - frame.current.y);
-        endScale.set(Math.max(0.05, o.size / frame.current.w));
-        exit.set(withTiming(1, { duration: ZOOM_MS }));
-      },
-    );
-    return unsubscribe;
+    const start = () => {
+      const o = getZoomOrigin();
+      if (!o || exit.get() > 0) return;
+      originX.set(o.x - frame.current.x);
+      originY.set(o.y - frame.current.y);
+      endScale.set(Math.max(0.05, o.size / frame.current.w));
+      exit.set(withTiming(1, { duration: SHRINK_MS, easing: Easing.out(Easing.cubic) }));
+    };
+    const nav = navigation as unknown as { addListener(e: string, cb: (ev: { data?: { closing?: boolean } }) => void): () => void };
+    // `beforeRemove` fires the moment going back is dispatched (before the native transition even starts), which is
+    // sooner than `transitionStart`, so the shrink begins with the pop instead of a beat after it.
+    const offBefore = nav.addListener('beforeRemove', start);
+    const offTransition = nav.addListener('transitionStart', (e) => {
+      if (e.data?.closing) start();
+    });
+    return () => {
+      offBefore();
+      offTransition();
+    };
   }, [navigation, exit, originX, originY, endScale]);
   const shrinkStyle = useAnimatedStyle(() => {
     const p = exit.get();
