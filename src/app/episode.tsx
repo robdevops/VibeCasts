@@ -1,1 +1,1 @@
-export { default } from '@/components/player/episode-screen';
+export { default } from '@/components/player/episode-lobby';
