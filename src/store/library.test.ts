@@ -118,3 +118,21 @@ describe('OPML import', () => {
     expect(s.getState().subscriptions[id].podcast.title).toBe('Real title');
   });
 });
+
+describe('countsVersion (unplayed counts only need to refresh when played/archived changes)', () => {
+  it('ignores progress saves but not played or archived changes', () => {
+    const s = createLibraryStore(createMemoryKV());
+    const v0 = s.getState().countsVersion;
+    s.getState().patchEpisode('1|a', { progressMs: 12_000, lastPlayed: 5 });
+    s.getState().patchEpisode('1|a', { progressMs: 20_000 });
+    expect(s.getState().countsVersion).toBe(v0);
+    s.getState().patchEpisode('1|a', { played: true });
+    expect(s.getState().countsVersion).toBe(v0 + 1);
+    s.getState().patchEpisode('1|a', { played: true }); // already played: no change
+    expect(s.getState().countsVersion).toBe(v0 + 1);
+    s.getState().patchEpisodes('1', ['a', 'b'], { archived: true });
+    expect(s.getState().countsVersion).toBe(v0 + 2);
+    s.getState().patchEpisodes('1', ['a', 'b'], { starred: true });
+    expect(s.getState().countsVersion).toBe(v0 + 2);
+  });
+});
