@@ -77,7 +77,7 @@ export function DownloadsSection() {
       </ThemedText>
       {picker('Auto archive', 'Move played episodes to the archive.', ARCHIVE_LABELS[s.autoArchive], 'archive')}
       {picker('Auto delete', 'Delete the downloaded file of played episodes.', ARCHIVE_LABELS[s.autoDelete], 'delete')}
-      {toggle('Include starred episodes', 'Starred episodes are kept unless this is on. Applies to auto archive and auto delete.', s.autoArchiveStarred, (v) => s.set({ autoArchiveStarred: v }), s.autoArchive === 'never' && s.autoDelete === 'never')}
+      {toggle('Clean up starred episodes', 'Starred episodes are kept unless this is on. Applies to auto archive and auto delete.', s.autoArchiveStarred, (v) => s.set({ autoArchiveStarred: v }), s.autoArchive === 'never' && s.autoDelete === 'never')}
 
       <View style={[styles.row, border]}>
         <View style={{ flex: 1, gap: 2 }}>
