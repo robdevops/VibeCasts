@@ -21,6 +21,8 @@ import { reorder } from '@/lib/layout';
 
 /** Opening a folder: that folder's tile (only) expands towards you and fades while the folder page fades in. */
 const FOLDER_ZOOM = true;
+/** How long the zoom into a folder, and the zoom back out of it, take (the route fade in `(podcasts)/_layout.tsx` matches). */
+const ZOOM_MS = 500;
 
 export type GridItem = { key: string; kind: 'podcast' | 'folder' };
 
@@ -344,7 +346,7 @@ export function TileGrid({
       if (zoomTimer.current) clearTimeout(zoomTimer.current);
       zoom.set(0);
       setZoomKey(item.key);
-      zoom.set(withTiming(1, { duration: 300 }));
+      zoom.set(withTiming(1, { duration: ZOOM_MS }));
     }
     if (item) onPress(item);
   };
@@ -388,8 +390,8 @@ export function TileGrid({
   // Back from the folder: the tile zooms back into place, then the copy goes away.
   useEffect(() => {
     if (!FOLDER_ZOOM || !focused || zoomKey === null) return;
-    zoom.set(withTiming(0, { duration: 280 }));
-    zoomTimer.current = setTimeout(() => setZoomKey(null), 300);
+    zoom.set(withTiming(0, { duration: ZOOM_MS }));
+    zoomTimer.current = setTimeout(() => setZoomKey(null), ZOOM_MS + 30);
     return () => {
       if (zoomTimer.current) clearTimeout(zoomTimer.current);
     };
