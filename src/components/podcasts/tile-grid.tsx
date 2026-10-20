@@ -134,12 +134,12 @@ export function TileGrid({
     updateWindow(scrollNow.current);
   }, [updateWindow]);
 
-  // Away from this screen (another tab, or a page pushed on top) keep only the tiles that were on screen,
+  // Away from this screen (another tab, or a page pushed on top) keep only about 8 rows,
   // so the extra mounted tiles and their decoded images don't sit in memory; coming back grows it again.
   const focused = useIsFocused();
   useEffect(() => {
     if (focused) return;
-    const next = visibleRange(scrollNow.current, viewportH.current || windowHeight, m, items.length);
+    const next = visibleRange(scrollNow.current, viewportH.current || windowHeight, m, items.length, 1); // about 8 rows
     setWin((w) => (w.start === next.start && w.end === next.end ? w : next));
   }, [focused, items.length, m, windowHeight]);
 
