@@ -80,7 +80,8 @@ export default function FolderScreen() {
             destructive: true,
             onPress: async () => {
               setMenu(false);
-              if (await confirmAsync('Delete folder?', `Delete ${folder.name}? Its podcasts go back to the main grid.`, 'Delete')) {
+              // An empty folder has nothing to lose: delete it without asking.
+              if (keys.length === 0 || (await confirmAsync('Delete folder?', `Delete ${folder.name}? Its podcasts go back to the main grid.`, 'Delete'))) {
                 useLibrary.getState().deleteFolder(id);
                 router.back();
               }

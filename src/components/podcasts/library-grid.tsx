@@ -56,12 +56,13 @@ export function LibraryGrid({ keys, folderId, layout, canReorder, refreshing, on
         }
       } else {
         const name = view.folders[id]?.name ?? 'this folder';
-        if (await confirmAsync('Delete folder?', `Delete ${name}? Its podcasts go back to the main grid.`, 'Delete')) {
+        // An empty folder has nothing to lose: delete it without asking.
+        if (view.members(id).length === 0 || (await confirmAsync('Delete folder?', `Delete ${name}? Its podcasts go back to the main grid.`, 'Delete'))) {
           deleteFolder(id);
         }
       }
     },
-    [deleteFolder, folderId, removeFromFolder, unsubscribe, view.folders, view.subscriptions],
+    [deleteFolder, folderId, removeFromFolder, unsubscribe, view],
   );
 
   const onReorder = useCallback(
