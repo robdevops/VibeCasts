@@ -70,7 +70,12 @@ export default function PodcastsScreen() {
   const [dragFromSearch, setDragFromSearch] = useState<string | null>(null);
 
   const mainKeys = useMemo(() => {
-    const tiles: SortableTile[] = homeOrder.map((key) => {
+    // Skip keys that no longer point at a show or folder (they would leave an empty slot).
+    const known = homeOrder.filter((key) => {
+      const { type, id } = parseKey(key);
+      return type === 'folder' ? !!view.folders[id] : !!view.subscriptions[id];
+    });
+    const tiles: SortableTile[] = known.map((key) => {
       const { type, id } = parseKey(key);
       if (type === 'folder') {
         const f = view.folders[id];
