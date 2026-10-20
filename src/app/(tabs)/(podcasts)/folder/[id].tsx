@@ -11,7 +11,6 @@ import { MenuSheet } from '@/components/ui/menu-sheet';
 import { NamePrompt } from '@/components/ui/name-prompt';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { ZoomOutFrame } from '@/components/ui/zoom-out-frame';
-import { readableOn } from '@/lib/color';
 import { useFeeds } from '@/store/feeds';
 import { useLibrary } from '@/store/library';
 
@@ -48,8 +47,8 @@ export default function FolderScreen() {
       <ScreenHeader
         title={folder.name}
         back
-        tint={folder.color}
-        right={<IconButton name="more-vert" label="Folder options" color={readableOn(folder.color)} onPress={() => setMenu(true)} />}
+        ink={folder.color}
+        right={<IconButton name="more-vert" label="Folder options" color={folder.color} onPress={() => setMenu(true)} />}
       />
       <View style={styles.fill}>
         <LibraryGrid
