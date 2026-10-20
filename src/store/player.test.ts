@@ -824,3 +824,69 @@ describe('playback log diagnostics', () => {
     expect(t.log.text()).toMatch(/pause requested/);
   });
 });
+
+describe('resuming after the sleep timer', () => {
+  it('plays again from where it stopped', () => {
+    jest.useFakeTimers();
+    let clock = 0;
+    const t = setup({ now: () => clock });
+    t.player.getState().play(episode, podcast);
+    t.emit({ positionSec: 100, playing: true });
+    t.player.getState().setSleep({ minutes: 10 });
+    clock = 600_100;
+    jest.advanceTimersByTime(600_100);
+    expect(t.player.getState().playing).toBe(false);
+    t.calls.length = 0;
+    t.player.getState().toggle();
+    expect(t.calls).toContain('play');
+    expect(t.player.getState().playing).toBe(true);
+    jest.useRealTimers();
+  });
+
+  it('plays again after "stop at end of episode" fired', () => {
+    const t = setup();
+    t.player.getState().play(episode, podcast);
+    t.player.getState().setSleep('episode');
+    t.emit({ positionSec: 1795, playing: true });
+    t.emit({ positionSec: 1800, finished: true, playing: false });
+    expect(t.player.getState().playing).toBe(false);
+    t.calls.length = 0;
+    t.player.getState().toggle();
+    expect(t.calls.some((c) => c.startsWith('load'))).toBe(true);
+    expect(t.calls).toContain('play');
+  });
+
+  it('reloads when pressing play after the timer gets no answer from the player', () => {
+    jest.useFakeTimers();
+    let clock = 0;
+    const t = setup({ now: () => clock });
+    t.player.getState().play(episode, podcast);
+    t.emit({ positionSec: 100, playing: true });
+    t.player.getState().setSleep({ minutes: 10 });
+    clock = 600_100;
+    jest.advanceTimersByTime(600_100);
+    expect(t.player.getState().playing).toBe(false);
+    // The native player has gone quiet: play() does nothing and no status arrives.
+    t.engine.play = () => void t.calls.push('play');
+    t.calls.length = 0;
+    clock += 3_600_000; // an hour later
+    t.player.getState().toggle();
+    clock += 3100;
+    jest.advanceTimersByTime(3100);
+    expect(t.calls.some((c) => c.startsWith('load'))).toBe(true);
+    jest.useRealTimers();
+  });
+});
+
+it('logs when the sleep timer is set and when it stops playback', () => {
+  jest.useFakeTimers();
+  let clock = 0;
+  const t = setup({ now: () => clock });
+  t.player.getState().play(episode, podcast);
+  t.player.getState().setSleep({ minutes: 10 });
+  clock = 600_100;
+  jest.advanceTimersByTime(600_100);
+  expect(t.log.text()).toMatch(/sleep set timer=10 min/);
+  expect(t.log.text()).toMatch(/sleep stop/);
+  jest.useRealTimers();
+});

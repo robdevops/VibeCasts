@@ -203,6 +203,7 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
     };
 
     const stopForSleep = () => {
+      log.add('sleep stop', { pos: livePosition, fg: appState.isActive() });
       // Clear the timer first: pausing emits a status update that would re-run checkSleep.
       clearSleepTimer();
       lastPauseAt = now();
@@ -589,6 +590,7 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
         clearSleepTimer();
         // Remember the length for "auto restart"; turning the timer off (or to end of episode) forgets it.
         lastSleepMinutes = opt !== null && opt !== 'episode' ? opt.minutes : null;
+        log.add('sleep set', { timer: opt === null ? 'off' : opt === 'episode' ? 'end of episode' : `${opt.minutes} min` });
         if (opt === null) {
           set({ sleep: null });
         } else if (opt === 'episode') {
