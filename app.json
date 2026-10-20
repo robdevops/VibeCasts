@@ -29,7 +29,10 @@
       "predictiveBackGestureEnabled": false,
       "package": "org.robstevens.vibecasts",
       "permissions": [
-        "WAKE_LOCK"
+        "WAKE_LOCK",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
       ]
     },
     "web": {
@@ -74,6 +77,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "95b7fe71-6cf0-4a35-bdf2-430068af91e9"
+      }
     }
   }
 }
