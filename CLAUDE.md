@@ -81,6 +81,6 @@ Node 24 (`.nvmrc`), Xcode (iOS Simulator), Android Studio (AVD). `npx expo start
 - Artwork prefetch, `feeds.refreshAll` and `feeds.backfill` work in on-screen order (`lib/display-order.ts`, `feeds.setPriority`, re-read before every pick so scrolling re-prioritises) and, when started with `whileLooking`, pause while the phone is locked or another tab is showing (`feeds.looking`, set by the Podcasts screen). The hourly background task has no screen and doesn't wait.
 
 ## Grid smoothness
-- `TileGrid` keeps recently visible tiles mounted (`mountedRange`: only lets go of tiles more than 6 rows away to free memory), `Cell` is memoised and re-renders only for its slot, drag state or `itemVersion` (what the tile shows; `LibraryGrid` supplies it), and `renderItem` is read through the `latest` ref. Don't pass a fresh `children` element to `Cell`.
+- `TileGrid` keeps recently visible tiles mounted (`mountedRange`: only lets go of tiles more than 32 rows away to free memory), `Cell` is memoised and re-renders only for its slot, drag state or `itemVersion` (what the tile shows; `LibraryGrid` supplies it), and `renderItem` is read through the `latest` ref. Don't pass a fresh `children` element to `Cell`.
 - `Artwork` skips the fade and placeholder for images already shown this session (`lib/shown-images.ts`), so remounted tiles don't flash.
 - `PodcastsScreen` keeps the visible range in a ref and pushes the load priority to the feeds store on a 300 ms trailing throttle; don't put scroll position in React state there.
