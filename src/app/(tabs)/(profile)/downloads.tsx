@@ -1,20 +1,22 @@
 import { router } from 'expo-router';
 import { useMemo } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, SectionList, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { confirmAsync } from '@/components/ui/confirm';
 import { Artwork } from '@/components/ui/artwork';
 import { Icon } from '@/components/ui/icon';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { useTheme } from '@/hooks/use-theme';
 import { downloadsSupported, useDownloads, type DownloadEntry } from '@/downloads/download-manager';
-import { confirmAsync } from '@/components/ui/confirm';
 import { useLibrary } from '@/store/library';
 
-type Row = { key: string; entry: DownloadEntry; downloading: boolean; failed: boolean; auto: boolean };
+type Row = { key: string; entry: DownloadEntry; status: 'queued' | 'downloading' | 'failed' | 'done'; auto: boolean };
+type Section = { title: string; data: Row[] };
 
 const megabytes = (b?: number) => (b ? `${Math.max(1, Math.round(b / 1_000_000))} MB` : '');
+const newestFirst = (a: Row, b: Row) => b.entry.episode.published - a.entry.episode.published;
 
 export default function DownloadsScreen() {
   const theme = useTheme();
@@ -23,18 +25,26 @@ export default function DownloadsScreen() {
   const failed = useDownloads((s) => s.failed);
   const states = useLibrary((s) => s.episodes);
 
-  const rows = useMemo<Row[]>(() => {
-    const out: Row[] = [];
+  const { sections, doneCount, total } = useMemo(() => {
+    const going: Row[] = [];
+    const broken: Row[] = [];
+    const done: Row[] = [];
     for (const [key, entry] of Object.entries(entries)) {
       const st = states[key];
-      if (st?.downloadedUri || active[key] || failed[key]) {
-        out.push({ key, entry, downloading: !!active[key], failed: !!failed[key] && !st?.downloadedUri, auto: !!st?.autoDownloaded });
-      }
+      const auto = !!st?.autoDownloaded;
+      if (active[key]) going.push({ key, entry, status: active[key], auto });
+      else if (st?.downloadedUri) done.push({ key, entry, status: 'done', auto });
+      else if (failed[key]) broken.push({ key, entry, status: 'failed', auto });
+      // Anything else was interrupted (e.g. the app closed mid-download) and is not shown.
     }
-    return out.sort((a, b) => b.entry.episode.published - a.entry.episode.published);
+    // Downloading ones first, then the ones waiting their turn.
+    going.sort((a, b) => (a.status === b.status ? newestFirst(a, b) : a.status === 'downloading' ? -1 : 1));
+    const out: Section[] = [];
+    if (going.length) out.push({ title: 'Currently downloading', data: going });
+    if (broken.length) out.push({ title: 'Failed', data: broken.sort(newestFirst) });
+    if (done.length) out.push({ title: 'Downloaded', data: done.sort(newestFirst) });
+    return { sections: out, doneCount: done.length, total: done.reduce((n, r) => n + (r.entry.sizeBytes ?? 0), 0) };
   }, [entries, states, active, failed]);
-
-  const total = rows.reduce((n, r) => n + (r.entry.sizeBytes ?? 0), 0);
 
   const removeAll = async () => {
     if (await confirmAsync('Delete all downloads?', 'The downloaded files are removed. Your progress is kept.', 'Delete all')) {
@@ -42,10 +52,15 @@ export default function DownloadsScreen() {
     }
   };
 
+  const retry = (row: Row) => {
+    const { podcast, episode } = row.entry;
+    useDownloads.getState().download({ ...episode, description: '' }, { ...podcast, feedUrl: podcast.feedUrl }, { auto: row.auto });
+  };
+
   return (
     <ThemedView style={styles.fill}>
       <ScreenHeader title="Downloads" back />
-      {rows.length === 0 ? (
+      {sections.length === 0 ? (
         <View style={styles.empty}>
           <ThemedText themeColor="textSecondary" style={{ textAlign: 'center' }}>
             {downloadsSupported
@@ -54,22 +69,25 @@ export default function DownloadsScreen() {
           </ThemedText>
         </View>
       ) : (
-        <FlatList
-          data={rows}
+        <SectionList
+          sections={sections}
           keyExtractor={(r) => r.key}
-          ListHeaderComponent={
+          stickySectionHeadersEnabled={false}
+          renderSectionHeader={({ section }) => (
             <View style={styles.summary}>
-              <ThemedText type="small" themeColor="textSecondary" style={{ flex: 1 }}>
-                {rows.length} episode{rows.length === 1 ? '' : 's'}
-                {total ? ` · ${megabytes(total)}` : ''}
+              <ThemedText type="smallBold" themeColor="textSecondary" style={{ flex: 1, letterSpacing: 0.6 }}>
+                {section.title.toUpperCase()}
+                {section.title === 'Downloaded' ? `  ·  ${doneCount}${total ? ` · ${megabytes(total)}` : ''}` : ''}
               </ThemedText>
-              <Pressable accessibilityRole="button" accessibilityLabel="Delete all downloads" onPress={() => void removeAll()}>
-                <ThemedText type="smallBold" style={{ color: theme.accent }}>
-                  Delete all
-                </ThemedText>
-              </Pressable>
+              {section.title === 'Downloaded' ? (
+                <Pressable accessibilityRole="button" accessibilityLabel="Delete all downloads" onPress={() => void removeAll()}>
+                  <ThemedText type="smallBold" style={{ color: theme.accent }}>
+                    Delete all
+                  </ThemedText>
+                </Pressable>
+              ) : null}
             </View>
-          }
+          )}
           renderItem={({ item }) => (
             <View style={[styles.row, { borderBottomColor: theme.border }]}>
               <Pressable
@@ -84,14 +102,27 @@ export default function DownloadsScreen() {
                   </ThemedText>
                   <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
                     {item.entry.podcast.title}
-                    {item.entry.sizeBytes ? ` · ${megabytes(item.entry.sizeBytes)}` : ''}
-                    {item.auto ? ' · auto' : ''}
-                    {item.failed ? ' · failed' : ''}
+                    {item.status === 'downloading' ? ' · downloading…' : ''}
+                    {item.status === 'queued' ? ' · waiting' : ''}
+                    {item.status === 'failed' ? ' · failed' : ''}
+                    {item.status === 'done' && item.entry.sizeBytes ? ` · ${megabytes(item.entry.sizeBytes)}` : ''}
+                    {item.status === 'done' && item.auto ? ' · auto' : ''}
                   </ThemedText>
                 </View>
               </Pressable>
-              {item.downloading ? (
+              {item.status === 'downloading' ? (
                 <ActivityIndicator color={theme.accent} />
+              ) : item.status === 'queued' ? (
+                <Icon name="schedule" size={22} color={theme.textSecondary} />
+              ) : item.status === 'failed' ? (
+                <View style={styles.actions}>
+                  <Pressable accessibilityRole="button" accessibilityLabel={`Retry download of ${item.entry.episode.title}`} hitSlop={8} onPress={() => retry(item)}>
+                    <Icon name="refresh" size={24} color={theme.accent} />
+                  </Pressable>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Dismiss" hitSlop={8} onPress={() => useDownloads.getState().remove(item.entry.podcast.id, item.entry.episode.id)}>
+                    <Icon name="close" size={22} color={theme.textSecondary} />
+                  </Pressable>
+                </View>
               ) : (
                 <Pressable
                   accessibilityRole="button"
@@ -112,7 +143,8 @@ export default function DownloadsScreen() {
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
-  summary: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10 },
+  summary: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 18, paddingBottom: 6 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth },
   body: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 14 },
 });
