@@ -16,11 +16,11 @@ describe('library store', () => {
 
     const f = s.getState().createFolder('News', '#fff');
     s.getState().moveToFolder('1', f);
-    expect(s.getState().homeOrder).toEqual(['p:2', `f:${f}`]);
+    expect(s.getState().homeOrder).toEqual([`f:${f}`, 'p:2']);
     expect(s.getState().folderOrder[f]).toEqual(['1']);
 
     s.getState().removeFromFolder('1');
-    expect(s.getState().homeOrder).toEqual(['p:2', `f:${f}`, 'p:1']);
+    expect(s.getState().homeOrder).toEqual([`f:${f}`, 'p:2', 'p:1']);
     expect(s.getState().subscriptions['1'].folderId).toBeUndefined();
   });
 
@@ -137,6 +137,15 @@ describe('countsVersion (unplayed counts only need to refresh when played/archiv
   });
 });
 
+it('puts a new folder at the top of the grid', () => {
+  const s = createLibraryStore(createMemoryKV());
+  s.getState().subscribe(pod('1'));
+  s.getState().subscribe(pod('2'));
+  const a = s.getState().createFolder('A', '#fff');
+  const b = s.getState().createFolder('B', '#fff');
+  expect(s.getState().homeOrder).toEqual([`f:${b}`, `f:${a}`, 'p:1', 'p:2']);
+});
+
 describe('placeInHome (dragging a podcast out of a folder, or up from search, into the main order)', () => {
   it('sets the home order and releases folder membership for podcasts placed in it', () => {
     const s = createLibraryStore(createMemoryKV());
@@ -145,7 +154,7 @@ describe('placeInHome (dragging a podcast out of a folder, or up from search, in
     s.getState().subscribe(pod('3'));
     const f = s.getState().createFolder('News', '#fff');
     s.getState().moveToFolder('2', f);
-    expect(s.getState().homeOrder).toEqual(['p:1', 'p:3', `f:${f}`]);
+    expect(s.getState().homeOrder).toEqual([`f:${f}`, 'p:1', 'p:3']);
 
     s.getState().placeInHome(['p:1', 'p:2', 'p:3', `f:${f}`]);
     expect(s.getState().homeOrder).toEqual(['p:1', 'p:2', 'p:3', `f:${f}`]);

@@ -211,7 +211,8 @@ export function createLibraryStore(storage: KV = kv) {
       set((s) => ({
         folders: { ...s.folders, [id]: { id, name, color, createdAt: Date.now() } },
         folderOrder: { ...s.folderOrder, [id]: [] },
-        homeOrder: [...s.homeOrder, tileKey({ type: 'folder', id })],
+        // A new folder goes to the top of the grid (the custom order), where it is easy to find and fill.
+        homeOrder: [tileKey({ type: 'folder', id }), ...s.homeOrder],
       }));
       return id;
     },
