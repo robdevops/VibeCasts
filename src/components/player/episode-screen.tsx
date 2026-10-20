@@ -432,8 +432,11 @@ function TabStrip({ tab, tabs, onTab, pagerX, pageWidth }: { tab: Tab; tabs: Tab
     if (ls.length !== count) return { opacity: 0 };
     const f = Math.min(count - 1, Math.max(0, -offset.get() / pageWidth));
     if (count < 2) return { opacity: 1, left: ls[0].x, width: ls[0].w };
-    const idx = ls.map((_, i) => i);
-    return { opacity: 1, left: interpolate(f, idx, ls.map((l) => l.x)), width: interpolate(f, idx, ls.map((l) => l.w)) };
+    // Slide between the two neighbouring labels. (No inline arrow functions in here: they would be
+    // hoisted out of the worklet and can't be called on the UI thread.)
+    const lo = Math.min(count - 2, Math.floor(f));
+    const t = f - lo;
+    return { opacity: 1, left: ls[lo].x + (ls[lo + 1].x - ls[lo].x) * t, width: ls[lo].w + (ls[lo + 1].w - ls[lo].w) * t };
   });
 
   return (
