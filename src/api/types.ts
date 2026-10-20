@@ -26,6 +26,8 @@ export type Episode = {
   durationSec: number;
   artwork?: string;
   transcriptUrl?: string;
+  /** File size from the feed's enclosure (bytes), when it gives one. */
+  sizeBytes?: number;
 };
 
 export type ParsedFeed = {

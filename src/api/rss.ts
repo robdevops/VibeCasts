@@ -42,6 +42,7 @@ export function parseFeed(xml: string): ParsedFeed {
     const itemImage = item['itunes:image'] as Node | undefined;
     const transcript = arr(item['podcast:transcript'] as Node | Node[] | undefined)[0];
     const published = Date.parse(text(item.pubDate));
+    const length = Number(text(enclosure?.['@_length']));
     return [
       {
         id: text(item.guid) || audioUrl,
@@ -52,6 +53,8 @@ export function parseFeed(xml: string): ParsedFeed {
         durationSec: parseDuration(item['itunes:duration']),
         artwork: itemImage ? text(itemImage['@_href']) || undefined : undefined,
         transcriptUrl: transcript ? text(transcript['@_url']) || undefined : undefined,
+        // Many feeds put 0 or 1 here; only believe a plausible size.
+        sizeBytes: length > 100_000 ? length : undefined,
       },
     ];
   });
