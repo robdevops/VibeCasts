@@ -1,6 +1,6 @@
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer, type AudioStatus } from 'expo-audio';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 
 export type NowPlayingMeta = { title: string; artist: string; artworkUrl?: string };
 
@@ -71,9 +71,18 @@ export function createExpoEngine(): PlayerEngine {
       interruptionMode: 'doNotMix',
     }).catch(() => undefined));
 
+  // True once the lock-screen session has been started. From the background Android refuses to start the media
+  // foreground service again ("startForeground() not allowed"), so there we only refresh what it shows.
+  let lockActive = false;
+
   const activateLockScreen = () => {
     if (!player || !meta || !lockScreenSupported) return;
     try {
+      if (lockActive && AppState.currentState !== 'active') {
+        player.updateLockScreenMetadata({ title: meta.title, artist: meta.artist, albumTitle: meta.artist, artworkUrl: meta.artworkUrl });
+        return;
+      }
+      lockActive = true;
       player.setActiveForLockScreen(
         true,
         { title: meta.title, artist: meta.artist, albumTitle: meta.artist, artworkUrl: meta.artworkUrl },
