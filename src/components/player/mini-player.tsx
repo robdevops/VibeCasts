@@ -78,12 +78,13 @@ export function MiniPlayer() {
 }
 
 const styles = StyleSheet.create({
-  card: { marginHorizontal: 10, marginBottom: 6, borderRadius: 16, overflow: 'hidden' },
+  // Square and full width, so the progress line is visible from its very start to its end.
+  card: { overflow: 'hidden' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 10, paddingTop: 8, paddingBottom: 8 },
   art: { borderRadius: 8 },
   spacer: { flex: 1, minWidth: 0 },
   play: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
-  track: { height: 2 },
+  track: { height: 1 },
   trackBg: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, opacity: 0.18 },
-  fill: { height: 2 },
+  fill: { height: 1 },
 });
