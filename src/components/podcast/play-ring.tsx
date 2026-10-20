@@ -10,8 +10,8 @@ const R = (SIZE - STROKE) / 2;
 const CIRC = 2 * Math.PI * R;
 
 /**
- * Play button with a ring that starts full and shrinks as you listen (time remaining); becomes a
- * green check once the episode is finished.
+ * Play button with a ring that starts full and shrinks as you listen (time remaining). Once the
+ * episode is finished it is just a small greyed-out tick (still tappable to play it again).
  */
 export function PlayRing({
   remaining,
@@ -29,7 +29,8 @@ export function PlayRing({
   label: string;
 }) {
   const theme = useTheme();
-  const color = played ? theme.success : theme.accent;
+  const color = theme.accent;
+  const done = played && !playing;
   const arc = Math.min(1, Math.max(0, remaining));
   return (
     <Pressable
@@ -39,9 +40,7 @@ export function PlayRing({
       hitSlop={8}
       style={({ pressed }) => [styles.wrap, { opacity: pressed ? 0.6 : 1 }]}>
       <Svg width={SIZE} height={SIZE} style={[StyleSheet.absoluteFill, { transform: [{ rotate: '-90deg' }] }]}>
-        {played && !playing ? (
-          <Circle cx={SIZE / 2} cy={SIZE / 2} r={SIZE / 2} fill={theme.success} />
-        ) : (
+        {done ? null : (
           <>
             <Circle cx={SIZE / 2} cy={SIZE / 2} r={R} stroke={color} strokeOpacity={0.25} strokeWidth={STROKE} fill="none" />
             {arc > 0 ? (
@@ -60,7 +59,7 @@ export function PlayRing({
         )}
       </Svg>
       <View>
-        <Icon name={playing ? 'pause' : played ? 'check' : 'play-arrow'} size={26} color={played && !playing ? '#fff' : color} />
+        {done ? <Icon name="check" size={18} color={theme.textSecondary} /> : <Icon name={playing ? 'pause' : 'play-arrow'} size={26} color={color} />}
       </View>
     </Pressable>
   );
