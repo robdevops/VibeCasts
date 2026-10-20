@@ -1,4 +1,5 @@
 import * as Haptics from 'expo-haptics';
+import { useIsFocused } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -132,6 +133,15 @@ export function TileGrid({
   useEffect(() => {
     updateWindow(scrollNow.current);
   }, [updateWindow]);
+
+  // Away from this screen (another tab, or a page pushed on top) keep only the tiles that were on screen,
+  // so the extra mounted tiles and their decoded images don't sit in memory; coming back grows it again.
+  const focused = useIsFocused();
+  useEffect(() => {
+    if (focused) return;
+    const next = visibleRange(scrollNow.current, viewportH.current || windowHeight, m, items.length);
+    setWin((w) => (w.start === next.start && w.end === next.end ? w : next));
+  }, [focused, items.length, m, windowHeight]);
 
   const removeBottom = insets.top + HEADER_HEIGHT;
 
