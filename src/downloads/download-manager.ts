@@ -6,6 +6,7 @@ import type { Episode, Podcast } from '@/api/types';
 import { kv } from '@/db/kv';
 import type { KV } from '@/db/storage';
 import { episodeKey } from '@/lib/episode-state';
+import { playerLog, type EventLog } from '@/player/event-log';
 import { useLibrary } from '@/store/library';
 
 import { audioExtension } from './episode-cache';
@@ -72,13 +73,15 @@ export function createFileDownloads(): DownloadFiles | undefined {
   };
 }
 
-type Deps = { files?: DownloadFiles; storage: KV; library: Pick<typeof useLibrary, 'getState'>; now: () => number };
+type Deps = { files?: DownloadFiles; storage: KV; library: Pick<typeof useLibrary, 'getState'>; now: () => number; log: Pick<EventLog, 'add'> };
 
 export function createDownloadManager(deps: Partial<Deps> = {}) {
   const files = 'files' in deps ? deps.files : createFileDownloads();
   const storage = deps.storage ?? kv;
   const library = deps.library ?? useLibrary;
   const now = deps.now ?? Date.now;
+  // Counts and sizes only: the log is shared when troubleshooting and holds no listening history.
+  const log = deps.log ?? playerLog;
   const queue: (() => Promise<void>)[] = [];
   let running = 0;
 
@@ -128,11 +131,14 @@ export function createDownloadManager(deps: Partial<Deps> = {}) {
       set((s) => ({ active: { ...s.active, [key]: 'queued' }, failed: omit(s.failed, key), entries: { ...s.entries, [key]: entry } }));
       queue.push(async () => {
         set((s) => ({ active: { ...s.active, [key]: 'downloading' } }));
+        log.add('download start', { auto: !!opts?.auto, queued: queue.length });
         try {
           const { uri, sizeBytes } = await files.fetch(key, episode.audioUrl);
+          log.add('download done', { mb: sizeBytes ? sizeBytes / 1_000_000 : undefined });
           library.getState().patchEpisode(key, { downloadedUri: uri, downloadedAt: now(), autoDownloaded: !!opts?.auto });
           set((s) => ({ entries: { ...s.entries, [key]: { ...entry, sizeBytes } } }));
         } catch {
+          log.add('download failed');
           set((s) => ({ failed: { ...s.failed, [key]: true } }));
         } finally {
           set((s) => ({ active: omit(s.active, key) }));

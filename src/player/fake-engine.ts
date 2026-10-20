@@ -4,6 +4,7 @@ import type { EngineCommand, EngineStatus, HeadsetControls, NowPlayingMeta, Play
 export function createFakeEngine() {
   const listeners = new Set<(s: EngineStatus) => void>();
   const commandListeners = new Set<(c: EngineCommand) => void>();
+  const diagnosticListeners = new Set<(kind: string, detail: string) => void>();
   /** The last headset configuration the store applied. */
   const headset: { current: HeadsetControls | null } = { current: null };
   const calls: string[] = [];
@@ -67,6 +68,10 @@ export function createFakeEngine() {
       commandListeners.add(l);
       return () => commandListeners.delete(l);
     },
+    subscribeDiagnostics(l) {
+      diagnosticListeners.add(l);
+      return () => diagnosticListeners.delete(l);
+    },
   };
   // What a reset player looks like after a long screen-off: back at 0:00, not playing.
   const reset = () => {
@@ -75,5 +80,5 @@ export function createFakeEngine() {
     emit({ positionSec: 0, playing: false });
   };
   const applyStart = () => emit({ positionSec: state.pendingStart });
-  return { engine, calls, buttonCalls, headset, command: (c: EngineCommand) => commandListeners.forEach((l) => l(c)), state, emit, reset, applyStart, fail: () => emit({ error: true, playing: false, loaded: false }) };
+  return { engine, calls, buttonCalls, headset, command: (c: EngineCommand) => commandListeners.forEach((l) => l(c)), diagnostic: (kind: string, detail: string) => diagnosticListeners.forEach((l) => l(kind, detail)), state, emit, reset, applyStart, fail: () => emit({ error: true, playing: false, loaded: false }) };
 }

@@ -16,7 +16,7 @@ jest.mock('expo-network', () => ({ getNetworkStateAsync: jest.fn(), NetworkState
 jest.mock('expo-file-system', () => ({ Directory: class {}, File: class {}, Paths: { cache: '' } }));
 // The module-level singleton builds a real engine on import; give it a no-op one.
 jest.mock('@/player/engine', () => ({
-  createExpoEngine: () => ({ load() {}, play() {}, pause() {}, seekTo() {}, setRate() {}, setLockScreenButtons() {}, setHeadsetControls() {}, subscribe: () => () => {}, subscribeCommands: () => () => {} }),
+  createExpoEngine: () => ({ load() {}, play() {}, pause() {}, seekTo() {}, setRate() {}, setLockScreenButtons() {}, setHeadsetControls() {}, subscribe: () => () => {}, subscribeCommands: () => () => {}, subscribeDiagnostics: () => () => {} }),
 }));
 
 const podcast: Podcast = { id: 'p', title: 'Show', author: 'A', artwork: 'art', feedUrl: 'https://f' };
@@ -798,5 +798,29 @@ describe('headset buttons', () => {
     // Going back does not make the second episode "previous" of the first one's history entry twice.
     t.command('previousEpisode');
     expect(t.player.getState().current?.episode.id).toBe('e');
+  });
+});
+
+describe('playback log diagnostics', () => {
+  it('says how an episode is being played', () => {
+    const t = setup();
+    t.player.getState().play(episode, podcast);
+    expect(t.log.text()).toMatch(/load .*from=stream/);
+  });
+
+  it('records what the system did to audio, from the native side', () => {
+    const t = setup();
+    t.diagnostic('focus', 'loss');
+    t.diagnostic('device-removed', 'bt-a2dp');
+    expect(t.log.text()).toMatch(/native focus detail=loss/);
+    expect(t.log.text()).toMatch(/native device-removed detail=bt-a2dp/);
+  });
+
+  it('logs pauses and plays the app asked for', () => {
+    const t = setup();
+    t.player.getState().play(episode, podcast);
+    t.player.getState().pause();
+    expect(t.log.text()).toMatch(/play requested/);
+    expect(t.log.text()).toMatch(/pause requested/);
   });
 });
