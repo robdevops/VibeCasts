@@ -95,7 +95,7 @@ it('a manual download is never rotated off', async () => {
   expect(t.library.getState().episodes[key('e1')]?.downloadedUri).toBeDefined();
 });
 
-it('archives played episodes after the chosen time, deleting their downloads', async () => {
+it('archives played episodes after the chosen time, leaving their downloads alone', async () => {
   const t = setup();
   t.downloads.getState().download(ep('e3'), podcast);
   await t.settle();
@@ -105,16 +105,20 @@ it('archives played episodes after the chosen time, deleting their downloads', a
   expect(t.library.getState().episodes[key('e3')].archived).toBe(false);
   t.advance(25 * 3_600_000);
   t.auto.runArchive();
-  expect(t.library.getState().episodes[key('e3')]).toMatchObject({ archived: true, downloadedUri: undefined });
-  expect(t.removed).toHaveLength(1);
+  expect(t.library.getState().episodes[key('e3')]).toMatchObject({ archived: true });
+  expect(t.library.getState().episodes[key('e3')].downloadedUri).toBeDefined();
+  expect(t.removed).toEqual([]);
 });
 
-it('delete when finished removes the file of a played episode without archiving it', async () => {
+it('auto delete removes the file of a played episode after its period, without archiving it', async () => {
   const t = setup();
   t.downloads.getState().download(ep('e3'), podcast);
   await t.settle();
-  t.library.getState().patchEpisode(key('e3'), { played: true });
-  t.settings.getState().set({ deleteOnFinish: true });
+  t.library.getState().patchEpisode(key('e3'), { played: true, playedAt: 0 });
+  t.settings.getState().set({ autoDelete: '24h' });
+  t.auto.runArchive();
+  expect(t.library.getState().episodes[key('e3')].downloadedUri).toBeDefined(); // too soon
+  t.advance(25 * 3_600_000);
   t.auto.runArchive();
   expect(t.library.getState().episodes[key('e3')]).toMatchObject({ archived: false, downloadedUri: undefined });
 });
