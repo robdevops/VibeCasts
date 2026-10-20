@@ -44,3 +44,27 @@ export function visibleRange(scrollY: number, viewportH: number, m: GridMetrics,
   const last = Math.floor((scrollY + viewportH - m.pad) / step) + overscanRows;
   return { start: Math.min(count, first * m.cols), end: Math.min(count, (last + 1) * m.cols) };
 }
+
+/**
+ * The tiles to keep mounted. Starts from the window that is needed now (`next`) but never
+ * unmounts tiles just because they scrolled a little way off: it only shrinks once the old edge is
+ * more than `slackRows` rows beyond the needed one, so scrolling back and forth over the same few
+ * rows doesn't unmount and remount tiles (which makes their art flash). Capped at `maxTiles`.
+ */
+export function mountedRange(
+  prev: { start: number; end: number },
+  next: { start: number; end: number },
+  cols: number,
+  slackRows = 6,
+  maxTiles = 120,
+) {
+  const slack = slackRows * cols;
+  let start = prev.start < next.start - slack ? next.start : Math.min(prev.start, next.start);
+  let end = prev.end > next.end + slack ? next.end : Math.max(prev.end, next.end);
+  if (end - start > maxTiles) {
+    // Too many: keep the needed window and as much of the old one as fits.
+    start = next.start;
+    end = next.end;
+  }
+  return { start, end };
+}
