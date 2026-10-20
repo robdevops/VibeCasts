@@ -8,6 +8,7 @@ import Animated, { interpolate, useAnimatedStyle, useSharedValue, type SharedVal
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ELASTIC_SCROLL } from '@/constants/scroll';
+import { AFTER_CLOSE_MS, SlideUpFrame } from '@/components/ui/slide-up-frame';
 import type { Episode, Podcast } from '@/api/types';
 import { ThemedText } from '@/components/themed-text';
 import { Artwork } from '@/components/ui/artwork';
@@ -44,7 +45,11 @@ type Sheet = 'speed' | 'sleep' | 'menu' | null;
 /** The episode route: browse any episode (a modal over the app). */
 export default function EpisodeScreen() {
   const params = useLocalSearchParams<{ podcastId?: string; episodeId?: string }>();
-  return <EpisodeView podcastId={params.podcastId} episodeId={params.episodeId} onClose={close} />;
+  return (
+    <SlideUpFrame>
+      <EpisodeView podcastId={params.podcastId} episodeId={params.episodeId} onClose={close} />
+    </SlideUpFrame>
+  );
 }
 
 type ViewProps = {
@@ -179,7 +184,8 @@ export function EpisodeView({ podcastId, episodeId, onClose, sheet: isSheet = fa
 
   const openQueue = () => {
     onClose();
-    router.push({ pathname: '/(tabs)/(playlists)/playlist/[id]', params: { id: 'up-next' } });
+    // Wait for the page to finish sliding away, or the push would land before the (held back) close.
+    setTimeout(() => router.push({ pathname: '/(tabs)/(playlists)/playlist/[id]', params: { id: 'up-next' } }), AFTER_CLOSE_MS);
   };
 
   const queueIt = (where: 'first' | 'last') => {
@@ -395,7 +401,8 @@ function close() {
 
 function goToPodcast(id: string, leave: () => void) {
   leave();
-  router.push({ pathname: '/(tabs)/(podcasts)/podcast/[id]', params: { id } });
+  // Wait for the page to finish sliding away, or the push would land before the (held back) close.
+  setTimeout(() => router.push({ pathname: '/(tabs)/(podcasts)/podcast/[id]', params: { id } }), AFTER_CLOSE_MS);
 }
 
 const TAB_LABEL: Record<Tab, string> = { playing: 'Playing', details: 'Details', bookmarks: 'Bookmarks' };

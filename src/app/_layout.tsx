@@ -78,7 +78,8 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="episode" options={{ presentation: 'modal', animation: 'slide_from_bottom', gestureEnabled: true }} />
+          {/* The episode page slides up and down itself (SlideUpFrame): the native modal transition can't be sped up. */}
+          <Stack.Screen name="episode" options={{ presentation: 'transparentModal', animation: 'none' }} />
         </Stack>
         <PlayerSheet />
         <ArtFlight />
