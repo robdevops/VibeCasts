@@ -1,5 +1,4 @@
 import * as Haptics from 'expo-haptics';
-import { useIsFocused } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -92,7 +91,7 @@ export function TileGrid({
   const [hoverFolder, setHoverFolder] = useState<string | null>(null);
   const [overRemove, setOverRemove] = useState(false);
   // Only tiles in (or near) view are mounted; [start, end) are indexes into the displayed order.
-  const [win, setWin] = useState({ start: 0, end: 36 });
+  const [win, setWin] = useState({ start: 0, end: 60 });
 
   const drag = useRef<Drag | null>(null);
   const orderRef = useRef<string[]>([]);
@@ -133,16 +132,6 @@ export function TileGrid({
   useEffect(() => {
     updateWindow(scrollNow.current);
   }, [updateWindow]);
-
-  // Away from this screen (another tab, or a page pushed on top) keep only about 8 rows,
-  // so the extra mounted tiles and their decoded images don't sit in memory; coming back grows it again.
-  const focused = useIsFocused();
-  const [away, setAway] = useState<{ start: number; end: number } | null>(null);
-  useEffect(() => {
-    if (focused || !viewportH.current) return;
-    setAway(visibleRange(scrollNow.current, viewportH.current, m, items.length, 1)); // about 8 rows
-  }, [focused, items.length, m]);
-  const mounted = focused ? win : (away ?? win); // `win` is left alone while away, so coming back it is exactly as it was
 
   const removeBottom = insets.top + HEADER_HEIGHT;
 
@@ -330,7 +319,7 @@ export function TileGrid({
             {items.map((item, natural) => {
               const key = item.key;
               const index = slotOf.get(key) ?? natural;
-              if ((index < mounted.start || index >= mounted.end) && key !== activeKey) return null;
+              if ((index < win.start || index >= win.end) && key !== activeKey) return null;
               return (
                 <Cell
                   key={key}
