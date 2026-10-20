@@ -5,6 +5,7 @@ import { RefreshControl, ScrollView, StyleSheet, View, useWindowDimensions, type
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useAnimatedStyle,
+  Easing,
   useSharedValue,
   withTiming,
   type SharedValue,
@@ -17,7 +18,7 @@ import { Icon } from '@/components/ui/icon';
 import { HEADER_HEIGHT } from '@/components/ui/screen-header';
 import { useTheme } from '@/hooks/use-theme';
 import { contentHeight, metricsFor, mountedRange, nearCenter, slotAt, slotRect, tileAt, visibleRange, type GridMetrics } from '@/lib/grid';
-import { FOLDER_ZOOM, setZoomOrigin, ZOOM_MS } from '@/lib/folder-zoom';
+import { FOLDER_ZOOM, SHRINK_MS, setZoomOrigin, ZOOM_MS } from '@/lib/folder-zoom';
 import { reorder } from '@/lib/layout';
 
 export type GridItem = { key: string; kind: 'podcast' | 'folder' };
@@ -399,8 +400,8 @@ export function TileGrid({
     }
     if (!wasAway.current) return;
     wasAway.current = false;
-    zoom.set(withTiming(0, { duration: ZOOM_MS }));
-    zoomTimer.current = setTimeout(() => setZoomKey(null), ZOOM_MS + 30);
+    zoom.set(withTiming(0, { duration: SHRINK_MS, easing: Easing.out(Easing.cubic) }));
+    zoomTimer.current = setTimeout(() => setZoomKey(null), SHRINK_MS + 30);
     return () => {
       if (zoomTimer.current) clearTimeout(zoomTimer.current);
     };
