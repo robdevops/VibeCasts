@@ -92,7 +92,7 @@ export function TileGrid({
   const [hoverFolder, setHoverFolder] = useState<string | null>(null);
   const [overRemove, setOverRemove] = useState(false);
   // Only tiles in (or near) view are mounted; [start, end) are indexes into the displayed order.
-  const [win, setWin] = useState({ start: 0, end: 60 });
+  const [win, setWin] = useState({ start: 0, end: 36 });
 
   const drag = useRef<Drag | null>(null);
   const orderRef = useRef<string[]>([]);
@@ -137,15 +137,12 @@ export function TileGrid({
   // Away from this screen (another tab, or a page pushed on top) keep only about 8 rows,
   // so the extra mounted tiles and their decoded images don't sit in memory; coming back grows it again.
   const focused = useIsFocused();
+  const [away, setAway] = useState<{ start: number; end: number } | null>(null);
   useEffect(() => {
-    if (focused) {
-      updateWindow(scrollNow.current); // back: re-grow around where we are
-      return;
-    }
-    if (!viewportH.current) return; // not laid out yet: nothing to trim to
-    const next = visibleRange(scrollNow.current, viewportH.current || windowHeight, m, items.length, 1); // about 8 rows
-    setWin((w) => (w.start === next.start && w.end === next.end ? w : next));
-  }, [focused, items.length, m, windowHeight, updateWindow]);
+    if (focused || !viewportH.current) return;
+    setAway(visibleRange(scrollNow.current, viewportH.current, m, items.length, 1)); // about 8 rows
+  }, [focused, items.length, m]);
+  const mounted = focused ? win : (away ?? win); // `win` is left alone while away, so coming back it is exactly as it was
 
   const removeBottom = insets.top + HEADER_HEIGHT;
 
@@ -333,7 +330,7 @@ export function TileGrid({
             {items.map((item, natural) => {
               const key = item.key;
               const index = slotOf.get(key) ?? natural;
-              if ((index < win.start || index >= win.end) && key !== activeKey) return null;
+              if ((index < mounted.start || index >= mounted.end) && key !== activeKey) return null;
               return (
                 <Cell
                   key={key}
