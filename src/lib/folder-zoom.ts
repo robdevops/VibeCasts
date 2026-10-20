@@ -9,7 +9,7 @@ export const ZOOM_MS = 500;
  * The shrink back into the tile. It fills the screen until it is nearly done, so with the same duration and an
  * ease-in-out it looks slower than the expand (where the tile has faded out before it finishes): shorter, and it starts fast.
  */
-export const SHRINK_MS = 350;
+export const SHRINK_MS = 300;
 
 export type ZoomOrigin = { x: number; y: number; size: number };
 
