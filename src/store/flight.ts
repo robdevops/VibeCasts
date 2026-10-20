@@ -21,8 +21,11 @@ type FlightData = {
 };
 
 type Actions = {
-  /** The grid: a tile was tapped. */
-  begin(key: string, uri: string | undefined, title: string, from: FlightRect): void;
+  /**
+   * The grid: a tile was tapped. With `fly` the artwork glides out to the page; without it the show opens some other way
+   * (the tile zooms) and this only remembers where the tile is, so closing can fly the artwork back to it.
+   */
+  begin(key: string, uri: string | undefined, title: string, from: FlightRect, fly?: boolean): void;
   /** The page: where its artwork is. */
   setTarget(key: string, to: FlightRect): void;
   /** The overlay: the flight to the page has finished. */
@@ -37,7 +40,7 @@ const idle: FlightData = { phase: 'idle', key: null, uri: undefined, title: '', 
 
 export const useFlight = create<FlightData & Actions>()((set, get) => ({
   ...idle,
-  begin: (key, uri, title, from) => set({ phase: 'opening', key, uri, title, from, to: null }),
+  begin: (key, uri, title, from, fly = true) => set({ phase: fly ? 'opening' : 'open', key, uri, title, from, to: null }),
   setTarget: (key, to) => {
     const s = get();
     if (s.key === key && s.phase === 'opening' && !s.to) set({ to });
