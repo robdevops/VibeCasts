@@ -1,4 +1,4 @@
-import { contentHeight, metricsFor, mountedRange, nearCenter, slotAt, slotRect, visibleRange } from './grid';
+import { contentHeight, metricsFor, mountedRange, nearCenter, slotAt, slotRect, tileAt, visibleRange } from './grid';
 
 const m = metricsFor(390); // pad 16, gap 12, 3 cols
 const step = m.tile + m.gap;
@@ -70,5 +70,21 @@ describe('mountedRange', () => {
 
   it('never keeps more than the cap', () => {
     expect(mountedRange({ start: 0, end: 90 }, { start: 60, end: 150 }, cols, 99, 120)).toEqual({ start: 60, end: 150 });
+  });
+});
+
+describe('tileAt', () => {
+  const m = metricsFor(390); // 3 columns, 16 padding, 12 gap
+  it('finds the tile under a point', () => {
+    const r = slotRect(4, m);
+    expect(tileAt(r.left + 5, r.top + 5, m, 10)).toBe(4);
+    expect(tileAt(r.left + m.tile - 1, r.top + m.tile - 1, m, 10)).toBe(4);
+  });
+  it('is -1 in the gaps, the padding and past the last tile', () => {
+    const r = slotRect(0, m);
+    expect(tileAt(r.left + m.tile + 3, r.top + 5, m, 10)).toBe(-1); // between columns
+    expect(tileAt(5, 5, m, 10)).toBe(-1); // padding
+    expect(tileAt(slotRect(5, m).left + 1, slotRect(5, m).top + 1, m, 5)).toBe(-1); // past the end
+    expect(tileAt(0, 0, m, 0)).toBe(-1);
   });
 });

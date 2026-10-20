@@ -15,7 +15,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Icon } from '@/components/ui/icon';
 import { HEADER_HEIGHT } from '@/components/ui/screen-header';
 import { useTheme } from '@/hooks/use-theme';
-import { contentHeight, metricsFor, mountedRange, nearCenter, slotAt, slotRect, visibleRange, type GridMetrics } from '@/lib/grid';
+import { contentHeight, metricsFor, mountedRange, nearCenter, slotAt, slotRect, tileAt, visibleRange, type GridMetrics } from '@/lib/grid';
 import { reorder } from '@/lib/layout';
 
 export type GridItem = { key: string; kind: 'podcast' | 'folder' };
@@ -82,22 +82,27 @@ export function TileGrid({
 
   const scrollRef = useRef<ScrollView>(null);
   const scrollY = useSharedValue(0);
-  // Only one tile is dragged at a time, so its drag values are shared by every tile instead of each creating its own five.
+  // Tiles are plain views and one gesture on the whole grid works out which tile is under the finger. The dragged
+  // tile is drawn as a "ghost" that follows the finger (these values), while its own slot is hidden.
   const dragTx = useSharedValue(0);
   const dragTy = useSharedValue(0);
   const dragStartScroll = useSharedValue(0);
   const dragStartLeft = useSharedValue(0);
   const dragStartTop = useSharedValue(0);
-  const drag$ = useMemo(
-    () => ({ tx: dragTx, ty: dragTy, startScroll: dragStartScroll, startLeft: dragStartLeft, startTop: dragStartTop }),
-    [dragTx, dragTy, dragStartScroll, dragStartLeft, dragStartTop],
-  );
+  const downX = useSharedValue(0);
+  const downY = useSharedValue(0);
+  const started = useSharedValue(false);
+  const ghostSettling = useSharedValue(false);
+  const ghostX = useSharedValue(0);
+  const ghostY = useSharedValue(0);
   const scrollNow = useRef(0);
   const contentH = useRef(0);
   const viewportH = useRef(0);
 
   const [order, setOrder] = useState<string[] | null>(null); // non-null while dragging
   const [activeKey, setActiveKey] = useState<string | null>(null);
+  const [ghostKey, setGhostKey] = useState<string | null>(null); // the dragged tile's ghost stays until it has settled into its slot
+  const ghostTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [hoverFolder, setHoverFolder] = useState<string | null>(null);
   const [overRemove, setOverRemove] = useState(false);
   // Only tiles in (or near) view are mounted; [start, end) are indexes into the displayed order.
@@ -225,14 +230,26 @@ export function TileGrid({
   useEffect(() => stopTimer, [stopTimer]);
 
   const onDragStart = useCallback(
-    (key: string, startLeft: number, startTop: number) => {
+    (downLeft: number, downTop: number) => {
       const keys = items.map((i) => i.key);
+      const at = tileAt(downLeft, downTop, m, keys.length);
+      if (at < 0) return; // the press began on a gap, not a tile
+      const key = keys[at];
+      const rect = slotRect(at, m);
       orderRef.current = keys;
-      drag.current = { key, startLeft, startTop, startScroll: scrollNow.current, tx: 0, ty: 0, absY: 0 };
+      drag.current = { key, startLeft: rect.left, startTop: rect.top, startScroll: scrollNow.current, tx: 0, ty: 0, absY: 0 };
+      dragStartLeft.set(rect.left);
+      dragStartTop.set(rect.top);
+      dragStartScroll.set(scrollNow.current);
+      dragTx.set(0);
+      dragTy.set(0);
+      ghostSettling.set(false);
+      if (ghostTimer.current) clearTimeout(ghostTimer.current);
       hoverRef.current = null;
       removeRef.current = false;
       setOrder(keys);
       setActiveKey(key);
+      setGhostKey(key);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       onDragBegin?.(key);
       stopTimer();
@@ -248,7 +265,7 @@ export function TileGrid({
         evaluate();
       }, 16);
     },
-    [evaluate, items, onDragBegin, scrollY, stopTimer],
+    [dragStartLeft, dragStartScroll, dragStartTop, dragTx, dragTy, evaluate, ghostSettling, items, m, onDragBegin, scrollY, stopTimer],
   );
 
   const onDragMove = useCallback(
@@ -271,9 +288,24 @@ export function TileGrid({
     stopTimer();
     const keys = orderRef.current;
     const original = items.map((i) => i.key);
+    const gone = removeRef.current || !!hoverRef.current;
     if (removeRef.current) onRemove?.(d.key);
     else if (hoverRef.current) onDropIntoFolder?.(d.key, hoverRef.current);
     else if (keys.some((k, i) => k !== original[i])) onReorder(keys);
+    // The ghost glides from where the finger left it into its slot, then the real tile takes over.
+    const dest = keys.indexOf(d.key);
+    if (gone || dest < 0) {
+      setGhostKey(null);
+    } else {
+      const rect = slotRect(dest, m);
+      ghostX.set(d.startLeft + d.tx);
+      ghostY.set(d.startTop + d.ty + (scrollNow.current - d.startScroll));
+      ghostSettling.set(true);
+      ghostX.set(withTiming(rect.left, { duration: 180 }));
+      ghostY.set(withTiming(rect.top, { duration: 180 }));
+      if (ghostTimer.current) clearTimeout(ghostTimer.current);
+      ghostTimer.current = setTimeout(() => setGhostKey(null), 200);
+    }
     removeRef.current = false;
     hoverRef.current = null;
     setOrder(null);
@@ -281,7 +313,7 @@ export function TileGrid({
     setHoverFolder(null);
     setOverRemove(false);
     onDragFinish?.();
-  }, [items, onDragFinish, onDropIntoFolder, onRemove, onReorder, stopTimer]);
+  }, [ghostSettling, ghostX, ghostY, items, m, onDragFinish, onDropIntoFolder, onRemove, onReorder, stopTimer]);
 
   const onLayout = (e: LayoutChangeEvent) => {
     setWidth(e.nativeEvent.layout.width);
@@ -293,22 +325,52 @@ export function TileGrid({
     contentH.current = height;
   }, [height]);
 
-  // Gestures must keep a stable identity or an active drag is cancelled on re-render, so the
-  // cells get wrappers that always call the latest handlers.
-  const latest = useRef({ onPress, onDragStart, onDragMove, onDragEnd, renderItem });
+  // The grid gesture must keep a stable identity or an active drag is cancelled on re-render, so it calls the
+  // latest handlers through this ref.
+  const pressAt = (x: number, y: number) => {
+    const keys = order ?? items.map((i) => i.key);
+    const at = tileAt(x, y, m, keys.length);
+    const item = at >= 0 ? byKey.get(keys[at]) : undefined;
+    if (item) onPress(item);
+  };
+  const latest = useRef({ pressAt, onDragStart, onDragMove, onDragEnd, renderItem });
   useEffect(() => {
-    latest.current = { onPress, onDragStart, onDragMove, onDragEnd, renderItem };
+    latest.current = { pressAt, onDragStart, onDragMove, onDragEnd, renderItem };
   });
   const stable = useMemo(
     () => ({
-      onPress: (item: GridItem) => latest.current.onPress(item),
-      onDragStart: (key: string, left: number, top: number) => latest.current.onDragStart(key, left, top),
+      pressAt: (x: number, y: number) => latest.current.pressAt(x, y),
+      onDragStart: (x: number, y: number) => latest.current.onDragStart(x, y),
       onDragMove: (tx: number, ty: number, absY: number) => latest.current.onDragMove(tx, ty, absY),
       onDragEnd: () => latest.current.onDragEnd(),
       renderItem: (item: GridItem, size: number) => latest.current.renderItem(item, size),
     }),
     [],
   );
+  const draggable = canReorder || !!onDropIntoFolder || !!onRemove;
+  const gesture = useGridGesture({
+    draggable,
+    downX,
+    downY,
+    dragTx,
+    dragTy,
+    started,
+    onDragStart: stable.onDragStart,
+    onDragMove: stable.onDragMove,
+    onDragEnd: stable.onDragEnd,
+    onTap: stable.pressAt,
+  });
+
+  const ghostStyle = useAnimatedStyle(() => {
+    if (ghostSettling.get()) return { left: ghostX.get(), top: ghostY.get(), opacity: 1, transform: [{ scale: 1 }] };
+    return {
+      left: dragStartLeft.get() + dragTx.get(),
+      top: dragStartTop.get() + dragTy.get() + (scrollY.get() - dragStartScroll.get()),
+      opacity: 0.92,
+      transform: [{ scale: 1.07 }],
+    };
+  });
+  const ghostItem = ghostKey ? byKey.get(ghostKey) : undefined;
   const dragging = activeKey !== null;
 
   return (
@@ -325,32 +387,32 @@ export function TileGrid({
         refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} /> : undefined}
         contentContainerStyle={{ minHeight: height }}>
         {width > 0 && items.length > 0 ? (
-          <View style={{ height, width }}>
-            {items.map((item, natural) => {
-              const key = item.key;
-              const index = slotOf.get(key) ?? natural;
-              if ((index < win.start || index >= win.end) && key !== activeKey) return null;
-              return (
-                <Cell
-                  key={key}
-                  item={item}
-                  index={index}
-                  m={m}
-                  active={key === activeKey}
-                  highlighted={key === hoverFolder}
-                  scrollY={scrollY}
-                  dragValues={drag$}
-                  draggable={canReorder || !!onDropIntoFolder || !!onRemove}
-                  onPress={stable.onPress}
-                  onDragStart={stable.onDragStart}
-                  onDragMove={stable.onDragMove}
-                  onDragEnd={stable.onDragEnd}
-                  renderItem={stable.renderItem}
-                  version={itemVersion ? itemVersion(item) : 0}
-                />
-              );
-            })}
-          </View>
+          <GestureDetector gesture={gesture}>
+            <View collapsable={false} style={{ height, width }}>
+              {items.map((item, natural) => {
+                const key = item.key;
+                const index = slotOf.get(key) ?? natural;
+                if ((index < win.start || index >= win.end) && key !== ghostKey) return null;
+                return (
+                  <Tile
+                    key={key}
+                    item={item}
+                    index={index}
+                    m={m}
+                    hidden={key === ghostKey}
+                    highlighted={key === hoverFolder}
+                    renderItem={stable.renderItem}
+                    version={itemVersion ? itemVersion(item) : 0}
+                  />
+                );
+              })}
+              {ghostItem ? (
+                <Animated.View pointerEvents="none" style={[styles.cell, { width: m.tile, height: m.tile, zIndex: 20 }, ghostStyle]}>
+                  {renderItem(ghostItem, m.tile)}
+                </Animated.View>
+              ) : null}
+            </View>
+          </GestureDetector>
         ) : (
           empty
         )}
@@ -373,34 +435,66 @@ export function TileGrid({
   );
 }
 
-type CellProps = {
+type GridGestureArgs = {
+  draggable: boolean;
+  downX: SharedValue<number>;
+  downY: SharedValue<number>;
+  dragTx: SharedValue<number>;
+  dragTy: SharedValue<number>;
+  started: SharedValue<boolean>;
+  onDragStart: (x: number, y: number) => void;
+  onDragMove: (tx: number, ty: number, absY: number) => void;
+  onDragEnd: () => void;
+  onTap: (x: number, y: number) => void;
+};
+
+/** One gesture for the whole grid: a tap, or a long press then drag, on whichever tile is under the finger. */
+function useGridGesture({ draggable, downX, downY, dragTx, dragTy, started, onDragStart, onDragMove, onDragEnd, onTap }: GridGestureArgs) {
+  return useMemo(() => {
+    const pan = Gesture.Pan()
+      .enabled(draggable)
+      .activateAfterLongPress(350)
+      .onBegin((e) => {
+        downX.set(e.x);
+        downY.set(e.y);
+      })
+      .onStart(() => {
+        started.set(true);
+        scheduleOnRN(onDragStart, downX.get(), downY.get());
+      })
+      .onUpdate((e) => {
+        dragTx.set(e.translationX);
+        dragTy.set(e.translationY);
+        scheduleOnRN(onDragMove, e.translationX, e.translationY, e.absoluteY);
+      })
+      .onFinalize(() => {
+        if (!started.get()) return;
+        started.set(false);
+        scheduleOnRN(onDragEnd);
+      });
+    const tap = Gesture.Tap()
+      .maxDuration(300)
+      .runOnJS(true)
+      .onEnd((e, success) => {
+        if (success) onTap(e.x, e.y);
+      });
+    return Gesture.Race(pan, tap);
+  }, [draggable, downX, downY, dragTx, dragTy, started, onDragStart, onDragMove, onDragEnd, onTap]);
+}
+
+type TileProps = {
   item: GridItem;
   index: number;
   m: GridMetrics;
-  active: boolean;
+  /** The dragged tile's slot: its ghost is drawn on top instead. */
+  hidden: boolean;
   highlighted: boolean;
-  draggable: boolean;
-  scrollY: SharedValue<number>;
-  dragValues: DragValues;
-  onPress: (item: GridItem) => void;
-  onDragStart: (key: string, left: number, top: number) => void;
-  onDragMove: (tx: number, ty: number, absY: number) => void;
-  onDragEnd: () => void;
   renderItem: (item: GridItem, size: number) => ReactNode;
   version: string | number;
 };
 
-/** The values that follow the finger while a tile is dragged (shared by all tiles: one is dragged at a time). */
-type DragValues = {
-  tx: SharedValue<number>;
-  ty: SharedValue<number>;
-  startScroll: SharedValue<number>;
-  startLeft: SharedValue<number>;
-  startTop: SharedValue<number>;
-};
-
-/** Re-render a tile only when something it shows or does has changed. */
-const sameCell = (a: CellProps, b: CellProps) =>
+/** Re-render a tile only when something it shows has changed. */
+const sameTile = (a: TileProps, b: TileProps) =>
   a.item.key === b.item.key &&
   a.item.kind === b.item.kind &&
   a.index === b.index &&
@@ -408,93 +502,33 @@ const sameCell = (a: CellProps, b: CellProps) =>
   a.m.cols === b.m.cols &&
   a.m.gap === b.m.gap &&
   a.m.pad === b.m.pad &&
-  a.active === b.active &&
+  a.hidden === b.hidden &&
   a.highlighted === b.highlighted &&
-  a.draggable === b.draggable &&
   a.version === b.version &&
-  a.scrollY === b.scrollY &&
-  a.dragValues === b.dragValues &&
-  a.onPress === b.onPress &&
-  a.onDragStart === b.onDragStart &&
-  a.onDragMove === b.onDragMove &&
-  a.onDragEnd === b.onDragEnd;
+  a.renderItem === b.renderItem;
 
-const Cell = memo(CellBase, sameCell);
-
-function CellBase({ item, index, m, active, highlighted, draggable, scrollY, dragValues, onPress, onDragStart, onDragMove, onDragEnd, renderItem }: CellProps) {
+/** A tile is just a positioned view (no gesture, no animated values): cheap to mount. It glides when its slot changes. */
+const Tile = memo(function TileBase({ item, index, m, hidden, highlighted, renderItem }: TileProps) {
   const rect = slotRect(index, m);
-  const x = useSharedValue(rect.left);
-  const y = useSharedValue(rect.top);
-  const { tx, ty, startScroll, startLeft, startTop } = dragValues;
-  const wasActive = useRef(false);
-
-  useEffect(() => {
-    if (active) {
-      wasActive.current = true;
-      return;
-    }
-    if (wasActive.current) {
-      // Released: start the settle animation from where the finger left the tile.
-      wasActive.current = false;
-      x.set(startLeft.value + tx.value);
-      y.set(startTop.value + ty.value + (scrollY.value - startScroll.value));
-    }
-    x.set(withTiming(rect.left, { duration: 180 }));
-    y.set(withTiming(rect.top, { duration: 180 }));
-  }, [active, rect.left, rect.top, x, y, tx, ty, startLeft, startTop, startScroll, scrollY]);
-
-  const style = useAnimatedStyle(() => {
-    if (active) {
-      return {
-        left: startLeft.value + tx.value,
-        top: startTop.value + ty.value + (scrollY.value - startScroll.value),
-        zIndex: 20,
-        opacity: 0.92,
-        transform: [{ scale: 1.07 }],
-      };
-    }
-    return { left: x.value, top: y.value, zIndex: 0, opacity: 1, transform: [{ scale: highlighted ? 1.12 : 1 }] };
-  });
-
-  const itemKey = item.key;
-  const itemKind = item.kind;
-  const gesture = useMemo(() => {
-    const pan = Gesture.Pan()
-      .enabled(draggable)
-      .activateAfterLongPress(350)
-      .onStart(() => {
-        startLeft.set(x.value);
-        startTop.set(y.value);
-        startScroll.set(scrollY.value);
-        tx.set(0);
-        ty.set(0);
-        scheduleOnRN(onDragStart, itemKey, x.value, y.value);
-      })
-      .onUpdate((e) => {
-        tx.set(e.translationX);
-        ty.set(e.translationY);
-        scheduleOnRN(onDragMove, e.translationX, e.translationY, e.absoluteY);
-      })
-      .onFinalize(() => {
-        scheduleOnRN(onDragEnd);
-      });
-
-    const tap = Gesture.Tap()
-      .maxDuration(300)
-      .runOnJS(true)
-      .onEnd((_e, success) => {
-        if (success) onPress({ key: itemKey, kind: itemKind });
-      });
-
-    return Gesture.Race(pan, tap);
-  }, [draggable, itemKey, itemKind, onDragEnd, onDragMove, onDragStart, onPress, scrollY, startLeft, startScroll, startTop, tx, ty, x, y]);
-
   return (
-    <GestureDetector gesture={gesture}>
-      <Animated.View style={[styles.cell, { width: m.tile, height: m.tile }, style]}>{renderItem(item, m.tile)}</Animated.View>
-    </GestureDetector>
+    <Animated.View
+      style={[
+        styles.cell,
+        {
+          left: rect.left,
+          top: rect.top,
+          width: m.tile,
+          height: m.tile,
+          opacity: hidden ? 0 : 1,
+          transform: [{ scale: highlighted ? 1.12 : 1 }],
+          transitionProperty: ['left', 'top', 'transform'],
+          transitionDuration: 180,
+        },
+      ]}>
+      {renderItem(item, m.tile)}
+    </Animated.View>
   );
-}
+}, sameTile);
 
 /** How long a dragged podcast must rest on a folder's edge before the folder makes way. */
 const DWELL_MS = 350;
