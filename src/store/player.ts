@@ -170,6 +170,7 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
     };
 
     const startPlayback = () => {
+      log.add('play requested');
       maybeRestartSleep();
       engine.play();
     };
@@ -401,8 +402,11 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
     const load = (episode: Episode, podcast: Podcast, startSec: number) => {
       const key = episodeKey(podcast.id, episode.id);
       const rate = settings.getState().playbackRate;
-      engine.load(sourceFor(key, episode), startSec, rate, metaOf({ podcast, episode }));
-      log.add('load', { startSec, rate });
+      const source = sourceFor(key, episode);
+      engine.load(source, startSec, rate, metaOf({ podcast, episode }));
+      // How it is being played: a downloaded file, the temporary cache, or streamed.
+      const from = library.getState().episodes[key]?.downloadedUri ? 'download' : cache?.uriFor(key) ? 'cache' : 'stream';
+      log.add('load', { startSec, rate, from });
       loadedKey = key;
       tick = null;
       expecting = startSec > 5 ? { pos: startSec, until: now() + LOAD_GRACE_MS, reloads: 1 } : null;
@@ -427,6 +431,7 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
       tick = null;
       expecting = livePosition > 5 ? { pos: livePosition, until: now() + LOAD_GRACE_MS, reloads: 1 } : null;
       engine.load(uri, livePosition, get().rate, metaOf(c));
+      log.add('cache swap', { pos: livePosition, playing: wasPlaying });
       if (wasPlaying) engine.play();
     };
 
@@ -434,7 +439,11 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
       const key = episodeKey(podcast.id, episode.id);
       if (!cache || !settings.getState().cacheWholeEpisodes) return;
       if (library.getState().episodes[key]?.downloadedUri || cache.uriFor(key)) return;
-      cache.start(key, episode.audioUrl, (uri) => swapToFile(key, uri));
+      log.add('cache start');
+      cache.start(key, episode.audioUrl, (uri) => {
+        log.add('cache ready');
+        swapToFile(key, uri);
+      });
     };
 
     const beginPlayback = (episode: Episode, podcast: Podcast, startSec: number) => {
@@ -542,6 +551,7 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
 
       pause() {
         if (!get().playing) return;
+        log.add('pause requested');
         lastPauseAt = now();
         engine.pause();
       },
@@ -609,6 +619,9 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
   };
   applyButtons();
   settings.subscribe(applyButtons);
+
+  // What the system did to audio (focus loss, headphones leaving, button presses): written to the log only.
+  engine.subscribeDiagnostics((kind, detail) => log.add(`native ${kind}`, { detail }));
 
   // Headset buttons set to "next / previous episode".
   engine.subscribeCommands((command: EngineCommand) => {
