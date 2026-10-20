@@ -18,8 +18,8 @@ import { Icon } from '@/components/ui/icon';
 import { HEADER_HEIGHT } from '@/components/ui/screen-header';
 import { useTheme } from '@/hooks/use-theme';
 import { contentHeight, metricsFor, mountedRange, nearCenter, slotAt, slotRect, tileAt, visibleRange, type GridMetrics } from '@/lib/grid';
-import { FOLDER_ZOOM, SHRINK_MS, setZoomOrigin, ZOOM_MS } from '@/lib/folder-zoom';
-import { reorder } from '@/lib/layout';
+import { FOLDER_ZOOM, SHRINK_MS, pushZoomOrigin, ZOOM_MS } from '@/lib/folder-zoom';
+import { parseKey, reorder } from '@/lib/layout';
 
 export type GridItem = { key: string; kind: 'podcast' | 'folder' };
 
@@ -340,7 +340,7 @@ export function TileGrid({
     const keys = order ?? items.map((i) => i.key);
     const at = tileAt(x, y, m, keys.length);
     const item = at >= 0 ? byKey.get(keys[at]) : undefined;
-    if (FOLDER_ZOOM && item?.kind === 'folder') {
+    if (FOLDER_ZOOM && item) {
       if (zoomTimer.current) clearTimeout(zoomTimer.current);
       zoom.set(0);
       setZoomKey(item.key);
@@ -348,7 +348,10 @@ export function TileGrid({
       // Remember where this tile is on screen, so the folder page can shrink back into it when it closes.
       const rect = slotRect(at, m);
       const scroll = scrollNow.current;
-      rootRef.current?.measureInWindow((x, y) => setZoomOrigin({ x: x + rect.left + m.tile / 2, y: y + rect.top + m.tile / 2 - scroll, size: m.tile }));
+      const key = `${item.kind}:${parseKey(item.key).id}`;
+      rootRef.current?.measureInWindow((x, y) =>
+        pushZoomOrigin({ key, x: x + rect.left + m.tile / 2, y: y + rect.top + m.tile / 2 - scroll, size: m.tile }),
+      );
     }
     if (item) onPress(item);
   };
