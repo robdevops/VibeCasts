@@ -72,6 +72,18 @@ export function LibraryGrid({ keys, folderId, layout, canReorder, refreshing, on
     [folderId, setFolderOrder, placeInHome],
   );
 
+  // What a tile shows, as a string: when it changes the tile re-renders, otherwise it is left alone.
+  const itemVersion = (item: GridItem) => {
+    const { id } = parseKey(item.key);
+    if (item.kind === 'folder') {
+      const f = view.folders[id];
+      const art = view.members(id).slice(0, 4).map((p) => `${p.id}:${p.artwork}`).join(',');
+      return `${f?.name}|${f?.color}|${view.folderUnplayed(id)}|${art}`;
+    }
+    const p = view.subscriptions[id]?.podcast;
+    return `${p?.title}|${p?.artwork}|${view.unplayed[id] ?? 0}`;
+  };
+
   const onDropIntoFolder = useCallback(
     (podcastKey: string, folderKey: string) => moveToFolder(parseKey(podcastKey).id, parseKey(folderKey).id),
     [moveToFolder],
@@ -132,6 +144,7 @@ export function LibraryGrid({ keys, folderId, layout, canReorder, refreshing, on
       onDragBegin={onDragBegin}
       onDragFinish={onDragFinish}
       onVisibleChange={onVisibleChange}
+      itemVersion={itemVersion}
       renderItem={(item, size) => {
         const { id } = parseKey(item.key);
         if (item.kind === 'folder') {

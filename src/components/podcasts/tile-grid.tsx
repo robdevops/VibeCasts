@@ -1,5 +1,5 @@
 import * as Haptics from 'expo-haptics';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -15,7 +15,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Icon } from '@/components/ui/icon';
 import { HEADER_HEIGHT } from '@/components/ui/screen-header';
 import { useTheme } from '@/hooks/use-theme';
-import { contentHeight, metricsFor, nearCenter, slotAt, slotRect, visibleRange, type GridMetrics } from '@/lib/grid';
+import { contentHeight, metricsFor, mountedRange, nearCenter, slotAt, slotRect, visibleRange, type GridMetrics } from '@/lib/grid';
 import { reorder } from '@/lib/layout';
 
 export type GridItem = { key: string; kind: 'podcast' | 'folder' };
@@ -23,6 +23,11 @@ export type GridItem = { key: string; kind: 'podcast' | 'folder' };
 type Props = {
   items: GridItem[];
   renderItem: (item: GridItem, size: number) => ReactNode;
+  /**
+   * A value that changes when what a tile shows changes (title, art, badge...). Tiles re-render only
+   * when their slot, drag state or this version changes, not on every scroll or reorder.
+   */
+  itemVersion?: (item: GridItem) => string | number;
   onPress: (item: GridItem) => void;
   /** Persist a new order (full list of keys). */
   onReorder: (keys: string[]) => void;
@@ -55,6 +60,7 @@ type Drag = {
 export function TileGrid({
   items,
   renderItem,
+  itemVersion,
   onPress,
   onReorder,
   onDropIntoFolder,
@@ -111,7 +117,11 @@ export function TileGrid({
   const updateWindow = useCallback(
     (y: number) => {
       const next = visibleRange(y, viewportH.current || windowHeight, m, items.length);
-      setWin((w) => (w.start === next.start && w.end === next.end ? w : next));
+      // Keep recently visible tiles mounted (only let go of far-away ones): remounting makes art flash.
+      setWin((w) => {
+        const merged = mountedRange(w, next, m.cols);
+        return merged.start === w.start && merged.end === w.end ? w : merged;
+      });
       if (next.start !== lastRange.current.start || next.end !== lastRange.current.end) {
         lastRange.current = next;
         visibleCb.current?.(next);
@@ -275,9 +285,9 @@ export function TileGrid({
 
   // Gestures must keep a stable identity or an active drag is cancelled on re-render, so the
   // cells get wrappers that always call the latest handlers.
-  const latest = useRef({ onPress, onDragStart, onDragMove, onDragEnd });
+  const latest = useRef({ onPress, onDragStart, onDragMove, onDragEnd, renderItem });
   useEffect(() => {
-    latest.current = { onPress, onDragStart, onDragMove, onDragEnd };
+    latest.current = { onPress, onDragStart, onDragMove, onDragEnd, renderItem };
   });
   const stable = useMemo(
     () => ({
@@ -285,6 +295,7 @@ export function TileGrid({
       onDragStart: (key: string, left: number, top: number) => latest.current.onDragStart(key, left, top),
       onDragMove: (tx: number, ty: number, absY: number) => latest.current.onDragMove(tx, ty, absY),
       onDragEnd: () => latest.current.onDragEnd(),
+      renderItem: (item: GridItem, size: number) => latest.current.renderItem(item, size),
     }),
     [],
   );
@@ -322,9 +333,10 @@ export function TileGrid({
                   onPress={stable.onPress}
                   onDragStart={stable.onDragStart}
                   onDragMove={stable.onDragMove}
-                  onDragEnd={stable.onDragEnd}>
-                  {renderItem(item, m.tile)}
-                </Cell>
+                  onDragEnd={stable.onDragEnd}
+                  renderItem={stable.renderItem}
+                  version={itemVersion ? itemVersion(item) : 0}
+                />
               );
             })}
           </View>
@@ -362,10 +374,32 @@ type CellProps = {
   onDragStart: (key: string, left: number, top: number) => void;
   onDragMove: (tx: number, ty: number, absY: number) => void;
   onDragEnd: () => void;
-  children: ReactNode;
+  renderItem: (item: GridItem, size: number) => ReactNode;
+  version: string | number;
 };
 
-function Cell({ item, index, m, active, highlighted, draggable, scrollY, onPress, onDragStart, onDragMove, onDragEnd, children }: CellProps) {
+/** Re-render a tile only when something it shows or does has changed. */
+const sameCell = (a: CellProps, b: CellProps) =>
+  a.item.key === b.item.key &&
+  a.item.kind === b.item.kind &&
+  a.index === b.index &&
+  a.m.tile === b.m.tile &&
+  a.m.cols === b.m.cols &&
+  a.m.gap === b.m.gap &&
+  a.m.pad === b.m.pad &&
+  a.active === b.active &&
+  a.highlighted === b.highlighted &&
+  a.draggable === b.draggable &&
+  a.version === b.version &&
+  a.scrollY === b.scrollY &&
+  a.onPress === b.onPress &&
+  a.onDragStart === b.onDragStart &&
+  a.onDragMove === b.onDragMove &&
+  a.onDragEnd === b.onDragEnd;
+
+const Cell = memo(CellBase, sameCell);
+
+function CellBase({ item, index, m, active, highlighted, draggable, scrollY, onPress, onDragStart, onDragMove, onDragEnd, renderItem }: CellProps) {
   const rect = slotRect(index, m);
   const x = useSharedValue(rect.left);
   const y = useSharedValue(rect.top);
@@ -439,7 +473,7 @@ function Cell({ item, index, m, active, highlighted, draggable, scrollY, onPress
 
   return (
     <GestureDetector gesture={gesture}>
-      <Animated.View style={[styles.cell, { width: m.tile, height: m.tile }, style]}>{children}</Animated.View>
+      <Animated.View style={[styles.cell, { width: m.tile, height: m.tile }, style]}>{renderItem(item, m.tile)}</Animated.View>
     </GestureDetector>
   );
 }

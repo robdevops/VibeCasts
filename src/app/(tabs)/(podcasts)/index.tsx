@@ -62,7 +62,6 @@ export default function PodcastsScreen() {
   const searching = query !== null && query.trim().length > 0;
   // A search result being dragged: the grid shows the whole library so it can be placed anywhere.
   const [dragFromSearch, setDragFromSearch] = useState<string | null>(null);
-  const [visibleStart, setVisibleStart] = useState(0);
 
   const mainKeys = useMemo(() => {
     const tiles: SortableTile[] = homeOrder.map((key) => {
@@ -117,13 +116,38 @@ export default function PodcastsScreen() {
     return () => useFeeds.getState().setLooking(false);
   }, [looking]);
 
+  // The load priority follows what is on screen. The visible range lives in a ref and is pushed to
+  // the feeds store on a trailing throttle: putting it in React state would re-render this whole
+  // screen (and every tile) each time scrolling crosses a row.
+  const visibleStart = useRef(0);
+  const prioritySource = useRef({ mainKeys, folderOrder: view.folderOrder, ignoreScroll: false });
+  useEffect(() => {
+    prioritySource.current = { mainKeys, folderOrder: view.folderOrder, ignoreScroll: searching && !dragFromSearch };
+  });
+  const pushPriority = useCallback(() => {
+    const { mainKeys: keys, folderOrder, ignoreScroll } = prioritySource.current;
+    useFeeds.getState().setPriority(displayOrder(keys, folderOrder, { from: ignoreScroll ? 0 : visibleStart.current }));
+  }, []);
+  const priorityTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const onVisibleChange = useCallback(
+    (r: { start: number }) => {
+      visibleStart.current = r.start;
+      if (priorityTimer.current) return;
+      priorityTimer.current = setTimeout(() => {
+        priorityTimer.current = undefined;
+        pushPriority();
+      }, 300);
+    },
+    [pushPriority],
+  );
+  useEffect(() => () => clearTimeout(priorityTimer.current), []);
   const priority = useMemo(
-    () => displayOrder(mainKeys, view.folderOrder, { from: searching && !dragFromSearch ? 0 : visibleStart }),
-    [mainKeys, view.folderOrder, searching, dragFromSearch, visibleStart],
+    () => displayOrder(mainKeys, view.folderOrder, { from: 0 }),
+    [mainKeys, view.folderOrder],
   );
   useEffect(() => {
-    useFeeds.getState().setPriority(priority);
-  }, [priority]);
+    pushPriority();
+  }, [mainKeys, view.folderOrder, searching, dragFromSearch, pushPriority]);
 
   // Warm the artwork of the tiles in the order they are shown (the first screenful first).
   const priorityRef = useRef(priority);
@@ -214,7 +238,7 @@ export default function PodcastsScreen() {
           canReorder={sort === 'custom' && (!searching || dragFromSearch !== null)}
           onDragBegin={onDragBegin}
           onDragFinish={onDragFinish}
-          onVisibleChange={(r) => setVisibleStart(r.start)}
+          onVisibleChange={onVisibleChange}
           refreshing={refreshing}
           onRefresh={refresh}
           empty={

@@ -1,4 +1,4 @@
-import { contentHeight, metricsFor, nearCenter, slotAt, slotRect, visibleRange } from './grid';
+import { contentHeight, metricsFor, mountedRange, nearCenter, slotAt, slotRect, visibleRange } from './grid';
 
 const m = metricsFor(390); // pad 16, gap 12, 3 cols
 const step = m.tile + m.gap;
@@ -50,5 +50,25 @@ describe('visibleRange', () => {
 
   it('clamps at the end', () => {
     expect(visibleRange(1e6, 800, m, 186).end).toBe(186);
+  });
+});
+
+describe('mountedRange', () => {
+  const cols = 3;
+
+  it('grows to cover where you scrolled and keeps tiles you just left', () => {
+    const r = mountedRange({ start: 0, end: 24 }, { start: 6, end: 30 }, cols);
+    expect(r).toEqual({ start: 0, end: 30 });
+    expect(mountedRange(r, { start: 3, end: 27 }, cols)).toEqual({ start: 0, end: 30 }); // a small scroll back unmounts nothing
+  });
+
+  it('lets go of tiles once they are far (more than 6 rows) away', () => {
+    expect(mountedRange({ start: 0, end: 24 }, { start: 60, end: 84 }, cols)).toEqual({ start: 60, end: 84 });
+    expect(mountedRange({ start: 0, end: 30 }, { start: 30, end: 54 }, cols)).toEqual({ start: 30, end: 54 }); // the old start is 10 rows behind: dropped
+    expect(mountedRange({ start: 0, end: 30 }, { start: 12, end: 36 }, cols)).toEqual({ start: 0, end: 36 }); // only 4 rows behind: kept
+  });
+
+  it('never keeps more than the cap', () => {
+    expect(mountedRange({ start: 0, end: 90 }, { start: 60, end: 150 }, cols, 99, 120)).toEqual({ start: 60, end: 150 });
   });
 });
