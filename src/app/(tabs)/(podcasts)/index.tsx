@@ -168,7 +168,9 @@ export default function PodcastsScreen() {
     if (!libraryReady || !looking) return;
     const subs = useLibrary.getState().subscriptions;
     const urls = priorityRef.current.map((id) => subs[id]?.podcast.artwork ?? '');
-    void prefetchTileArtwork(urls, { shouldContinue: () => useFeeds.getState().looking });
+    // Every show at the smallest size first (tiny, so each tile has something to show), then sharp ones in display order.
+    const shouldContinue = () => useFeeds.getState().looking;
+    void prefetchTileArtwork(urls, { low: true, shouldContinue }).then(() => prefetchTileArtwork(urls, { shouldContinue }));
   }, [libraryReady, looking, podcastIds]);
 
   const setSort = (s: PodcastSort) => {

@@ -22,7 +22,7 @@ export type GridItem = { key: string; kind: 'podcast' | 'folder' };
 
 type Props = {
   items: GridItem[];
-  renderItem: (item: GridItem, size: number) => ReactNode;
+  renderItem: (item: GridItem, size: number, low: boolean) => ReactNode;
   /**
    * A value that changes when what a tile shows changes (title, art, badge...). Tiles re-render only
    * when their slot, drag state or this version changes, not on every scroll or reorder.
@@ -92,6 +92,8 @@ export function TileGrid({
   const [overRemove, setOverRemove] = useState(false);
   // Only tiles in (or near) view are mounted; [start, end) are indexes into the displayed order.
   const [win, setWin] = useState({ start: 0, end: 60 });
+  // The tiles on or near the screen get sharp art; the rest of the mounted ones show the smallest version (less memory).
+  const [near, setNear] = useState({ start: 0, end: 60 });
 
   const drag = useRef<Drag | null>(null);
   const orderRef = useRef<string[]>([]);
@@ -122,6 +124,7 @@ export function TileGrid({
         const merged = mountedRange(w, next, m.cols);
         return merged.start === w.start && merged.end === w.end ? w : merged;
       });
+      setNear((n) => (n.start === next.start && n.end === next.end ? n : next));
       if (next.start !== lastRange.current.start || next.end !== lastRange.current.end) {
         lastRange.current = next;
         visibleCb.current?.(next);
@@ -295,7 +298,7 @@ export function TileGrid({
       onDragStart: (key: string, left: number, top: number) => latest.current.onDragStart(key, left, top),
       onDragMove: (tx: number, ty: number, absY: number) => latest.current.onDragMove(tx, ty, absY),
       onDragEnd: () => latest.current.onDragEnd(),
-      renderItem: (item: GridItem, size: number) => latest.current.renderItem(item, size),
+      renderItem: (item: GridItem, size: number, low: boolean) => latest.current.renderItem(item, size, low),
     }),
     [],
   );
@@ -335,6 +338,7 @@ export function TileGrid({
                   onDragMove={stable.onDragMove}
                   onDragEnd={stable.onDragEnd}
                   renderItem={stable.renderItem}
+                  low={(index < near.start || index >= near.end) && key !== activeKey}
                   version={itemVersion ? itemVersion(item) : 0}
                 />
               );
@@ -374,8 +378,9 @@ type CellProps = {
   onDragStart: (key: string, left: number, top: number) => void;
   onDragMove: (tx: number, ty: number, absY: number) => void;
   onDragEnd: () => void;
-  renderItem: (item: GridItem, size: number) => ReactNode;
+  renderItem: (item: GridItem, size: number, low: boolean) => ReactNode;
   version: string | number;
+  low: boolean;
 };
 
 /** Re-render a tile only when something it shows or does has changed. */
@@ -391,6 +396,7 @@ const sameCell = (a: CellProps, b: CellProps) =>
   a.highlighted === b.highlighted &&
   a.draggable === b.draggable &&
   a.version === b.version &&
+  a.low === b.low &&
   a.scrollY === b.scrollY &&
   a.onPress === b.onPress &&
   a.onDragStart === b.onDragStart &&
@@ -399,7 +405,7 @@ const sameCell = (a: CellProps, b: CellProps) =>
 
 const Cell = memo(CellBase, sameCell);
 
-function CellBase({ item, index, m, active, highlighted, draggable, scrollY, onPress, onDragStart, onDragMove, onDragEnd, renderItem }: CellProps) {
+function CellBase({ item, index, m, active, highlighted, draggable, scrollY, onPress, onDragStart, onDragMove, onDragEnd, renderItem, low }: CellProps) {
   const rect = slotRect(index, m);
   const x = useSharedValue(rect.left);
   const y = useSharedValue(rect.top);
@@ -473,7 +479,7 @@ function CellBase({ item, index, m, active, highlighted, draggable, scrollY, onP
 
   return (
     <GestureDetector gesture={gesture}>
-      <Animated.View style={[styles.cell, { width: m.tile, height: m.tile }, style]}>{renderItem(item, m.tile)}</Animated.View>
+      <Animated.View style={[styles.cell, { width: m.tile, height: m.tile }, style]}>{renderItem(item, m.tile, low)}</Animated.View>
     </GestureDetector>
   );
 }
