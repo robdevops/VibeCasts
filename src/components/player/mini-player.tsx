@@ -67,7 +67,9 @@ export function MiniPlayer() {
             <SkipIcon direction="forward" seconds={skipForward} size={32} color={theme.accent} />
           </Pressable>
         </View>
-        <View style={[styles.track, { backgroundColor: theme.border }]}>
+        {/* Thin progress line along the bottom edge. Display only: seeking happens on the player screen. */}
+        <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no" style={styles.track}>
+          <View style={[styles.trackBg, { backgroundColor: theme.accent }]} />
           <View style={[styles.fill, { backgroundColor: theme.accent, width: `${fraction * 100}%` }]} />
         </View>
       </View>
@@ -81,6 +83,7 @@ const styles = StyleSheet.create({
   art: { borderRadius: 8 },
   spacer: { flex: 1, minWidth: 0 },
   play: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
-  track: { height: 3 },
-  fill: { height: 3 },
+  track: { height: 2 },
+  trackBg: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, opacity: 0.18 },
+  fill: { height: 2 },
 });

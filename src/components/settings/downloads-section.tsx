@@ -13,7 +13,7 @@ const LIMITS = Array.from({ length: 10 }, (_, i) => i + 1);
 export function DownloadsSection() {
   const theme = useTheme();
   const s = useSettings();
-  const [menu, setMenu] = useState<'archive' | 'network' | null>(null);
+  const [menu, setMenu] = useState<'archive' | 'delete' | 'network' | null>(null);
 
   const border = { borderBottomColor: theme.border };
   const archiveItems: MenuItem[] = (Object.keys(ARCHIVE_LABELS) as ArchiveRule[]).map((r) => ({
@@ -21,6 +21,14 @@ export function DownloadsSection() {
     checked: s.autoArchive === r,
     onPress: () => {
       s.set({ autoArchive: r });
+      setMenu(null);
+    },
+  }));
+  const deleteItems: MenuItem[] = (Object.keys(ARCHIVE_LABELS) as ArchiveRule[]).map((r) => ({
+    label: ARCHIVE_LABELS[r],
+    checked: s.autoDelete === r,
+    onPress: () => {
+      s.set({ autoDelete: r });
       setMenu(null);
     },
   }));
@@ -33,7 +41,7 @@ export function DownloadsSection() {
     },
   }));
 
-  const picker = (label: string, hint: string, value: string, which: 'archive' | 'network') => (
+  const picker = (label: string, hint: string, value: string, which: 'archive' | 'delete' | 'network') => (
     <Pressable accessibilityRole="button" accessibilityLabel={`${label}: ${value}`} onPress={() => setMenu(which)} style={[styles.row, border]}>
       <View style={{ flex: 1, gap: 2 }}>
         <ThemedText>{label}</ThemedText>
@@ -67,8 +75,9 @@ export function DownloadsSection() {
       <ThemedText type="smallBold" themeColor="textSecondary" style={styles.section}>
         DOWNLOADS
       </ThemedText>
-      {picker('Auto archive', 'Archive played episodes and delete their downloads.', ARCHIVE_LABELS[s.autoArchive], 'archive')}
-      {toggle('Include starred episodes', 'Starred episodes are kept unless this is on.', s.autoArchiveStarred, (v) => s.set({ autoArchiveStarred: v }), s.autoArchive === 'never')}
+      {picker('Auto archive', 'Move played episodes to the archive.', ARCHIVE_LABELS[s.autoArchive], 'archive')}
+      {picker('Auto delete', 'Delete the downloaded file of played episodes.', ARCHIVE_LABELS[s.autoDelete], 'delete')}
+      {toggle('Include starred episodes', 'Starred episodes are kept unless this is on. Applies to auto archive and auto delete.', s.autoArchiveStarred, (v) => s.set({ autoArchiveStarred: v }), s.autoArchive === 'never' && s.autoDelete === 'never')}
 
       <View style={[styles.row, border]}>
         <View style={{ flex: 1, gap: 2 }}>
@@ -95,6 +104,7 @@ export function DownloadsSection() {
       </ThemedText>
 
       <MenuSheet visible={menu === 'archive'} items={archiveItems} title="Auto archive" onClose={() => setMenu(null)} />
+      <MenuSheet visible={menu === 'delete'} items={deleteItems} title="Auto delete" onClose={() => setMenu(null)} />
       <MenuSheet visible={menu === 'network'} items={networkItems} title="Only on" onClose={() => setMenu(null)} />
     </View>
   );

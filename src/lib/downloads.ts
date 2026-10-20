@@ -28,6 +28,15 @@ export function shouldAutoArchive(state: EpisodeState | undefined, now: number, 
   return since !== undefined && now - since >= ARCHIVE_AFTER_MS[rule];
 }
 
+/**
+ * Should this played episode's downloaded file be deleted now? Same periods as auto archive, but
+ * independent of archiving. Starred episodes are kept unless `includeStarred`.
+ */
+export function shouldAutoDelete(state: EpisodeState | undefined, now: number, rule: ArchiveRule, includeStarred: boolean): boolean {
+  if (!state?.downloadedUri) return false;
+  return shouldAutoArchive({ ...state, archived: false }, now, rule, includeStarred);
+}
+
 export type NetworkRule = 'any' | 'wifi' | 'unmetered';
 
 export const NETWORK_LABELS: Record<NetworkRule, string> = {
