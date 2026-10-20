@@ -1,5 +1,6 @@
 import { Platform, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
 
+import { ELASTIC_SCROLL } from '@/constants/scroll';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { LibrarySection } from '@/components/settings/library-section';
@@ -22,7 +23,7 @@ export default function SettingsScreen() {
   return (
     <ThemedView style={styles.fill}>
       <ScreenHeader title="Settings" back />
-      <ScrollView>
+      <ScrollView {...ELASTIC_SCROLL}>
         <NavRow label="Playback" hint="Skip lengths, resume, mobile data, sleep timer." href="/settings-playback" />
         <NavRow label="Downloads" hint="Auto archive, auto delete and automatic downloads." href="/settings-downloads" />
         <NavRow label="Bluetooth" hint="What the headset and lock screen buttons do." href="/settings-bluetooth" />

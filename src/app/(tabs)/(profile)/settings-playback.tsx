@@ -1,5 +1,6 @@
 import { ScrollView, StyleSheet } from 'react-native';
 
+import { ELASTIC_SCROLL } from '@/constants/scroll';
 import { ThemedView } from '@/components/themed-view';
 import { SecondsStepper, ToggleRow } from '@/components/settings/rows';
 import { ScreenHeader } from '@/components/ui/screen-header';
@@ -10,7 +11,7 @@ export default function PlaybackSettingsScreen() {
   return (
     <ThemedView style={styles.fill}>
       <ScreenHeader title="Playback" back />
-      <ScrollView>
+      <ScrollView {...ELASTIC_SCROLL}>
         <SecondsStepper label="Skip back" value={s.skipBackSec} onChange={(v) => s.set({ skipBackSec: v })} />
         <SecondsStepper label="Skip forward" value={s.skipForwardSec} onChange={(v) => s.set({ skipForwardSec: v })} />
         <ToggleRow label="Intelligent resume" hint="Resume 2 seconds before where you left off." value={s.intelligentResume} onChange={(v) => s.set({ intelligentResume: v })} />

@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useCallback, useMemo, type ReactNode } from 'react';
 import { FlatList, RefreshControl } from 'react-native';
 
+import { ELASTIC_SCROLL } from '@/constants/scroll';
 import { confirmAsync } from '@/components/ui/confirm';
 import { useTheme } from '@/hooks/use-theme';
 import { useLibraryView } from '@/hooks/use-library-view';
@@ -93,6 +94,7 @@ export function LibraryGrid({ keys, folderId, layout, canReorder, refreshing, on
   if (layout === 'list') {
     return (
       <FlatList
+        {...ELASTIC_SCROLL}
         data={items}
         keyExtractor={(i) => i.key}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />}

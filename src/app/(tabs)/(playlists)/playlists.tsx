@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 
+import { ELASTIC_SCROLL } from '@/constants/scroll';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Icon, type IconName } from '@/components/ui/icon';
@@ -30,6 +31,7 @@ export default function PlaylistsScreen() {
         right={<IconButton name="playlist-add" label="New playlist" color={theme.accent} onPress={() => setNaming(true)} />}
       />
       <FlatList
+        {...ELASTIC_SCROLL}
         data={rows}
         keyExtractor={(r) => r.id}
         renderItem={({ item }) => (
