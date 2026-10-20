@@ -1,7 +1,7 @@
 import { AppState } from 'react-native';
 
 import type { Podcast } from '@/api/types';
-import { downloadAllowed, planAutoDownloads, shouldAutoArchive, type Conditions } from '@/lib/downloads';
+import { downloadAllowed, planAutoDownloads, shouldAutoArchive, shouldAutoDelete, type Conditions } from '@/lib/downloads';
 import { useFeeds } from '@/store/feeds';
 import { useLibrary } from '@/store/library';
 import { useSettings } from '@/store/settings';
@@ -26,16 +26,14 @@ export function createAutomation(deps: Partial<Deps> = {}) {
   const conditions = deps.conditions ?? readConditions;
   const now = deps.now ?? Date.now;
 
-  /** Archive played episodes per the setting, and delete the files of finished ones. */
+  /** Archive played episodes and delete their downloads, each per its own setting. */
   function runArchive() {
-    const { autoArchive, autoArchiveStarred, deleteOnFinish } = settings.getState();
+    const { autoArchive, autoArchiveStarred, autoDelete } = settings.getState();
     for (const [key, state] of Object.entries(library.getState().episodes)) {
       const [podcastId, ...rest] = key.split('|');
       const episodeId = rest.join('|');
-      const archive = shouldAutoArchive(state, now(), autoArchive, autoArchiveStarred);
-      if (archive) library.getState().patchEpisode(key, { archived: true });
-      // Archiving frees the file too; "delete when finished" does so even without archiving.
-      if (state.downloadedUri && (archive || (deleteOnFinish && state.played))) downloads.getState().remove(podcastId, episodeId);
+      if (shouldAutoArchive(state, now(), autoArchive, autoArchiveStarred)) library.getState().patchEpisode(key, { archived: true });
+      if (shouldAutoDelete(state, now(), autoDelete, autoArchiveStarred)) downloads.getState().remove(podcastId, episodeId);
     }
   }
 
@@ -85,7 +83,7 @@ export function startDownloadAutomation(): () => void {
     if (s.subscriptions !== p.subscriptions || playedChanged(s.episodes, p.episodes)) soon();
   });
   const offSettings = useSettings.subscribe((s, p) => {
-    if (s.autoArchive !== p.autoArchive || s.autoArchiveStarred !== p.autoArchiveStarred || s.autoDownloadLimit !== p.autoDownloadLimit || s.downloadOnlyCharging !== p.downloadOnlyCharging || s.downloadNetwork !== p.downloadNetwork || s.deleteOnFinish !== p.deleteOnFinish) soon();
+    if (s.autoArchive !== p.autoArchive || s.autoArchiveStarred !== p.autoArchiveStarred || s.autoDownloadLimit !== p.autoDownloadLimit || s.downloadOnlyCharging !== p.downloadOnlyCharging || s.downloadNetwork !== p.downloadNetwork || s.autoDelete !== p.autoDelete) soon();
   });
   soon();
   return () => {

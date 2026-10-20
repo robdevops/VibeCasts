@@ -1,6 +1,6 @@
 import type { Episode } from '@/api/types';
 
-import { downloadAllowed, planAutoDownloads, shouldAutoArchive } from './downloads';
+import { downloadAllowed, planAutoDownloads, shouldAutoArchive, shouldAutoDelete } from './downloads';
 import { emptyEpisodeState, episodeKey, type EpisodeState } from './episode-state';
 
 const HOUR = 3_600_000;
@@ -100,5 +100,27 @@ describe('planAutoDownloads', () => {
 
   it('limit of zero downloads nothing', () => {
     expect(planAutoDownloads({ podcastId: 'p', episodes: eps, states: {}, limit: 0 }).download).toEqual([]);
+  });
+});
+
+describe('shouldAutoDelete', () => {
+  const withFile = (over: Partial<EpisodeState> = {}): EpisodeState => played({ downloadedUri: 'file:///x', ...over });
+
+  it('needs a downloaded, played episode', () => {
+    expect(shouldAutoDelete(played(), 99 * HOUR, 'played', true)).toBe(false); // nothing downloaded
+    expect(shouldAutoDelete({ ...emptyEpisodeState, downloadedUri: 'f' }, 99 * HOUR, 'played', true)).toBe(false); // unplayed
+    expect(shouldAutoDelete(withFile(), 0, 'never', true)).toBe(false);
+  });
+
+  it('uses the same periods as archive, even when the episode is already archived', () => {
+    expect(shouldAutoDelete(withFile(), 0, 'played', true)).toBe(true);
+    expect(shouldAutoDelete(withFile({ archived: true }), 24 * HOUR, '24h', true)).toBe(true);
+    expect(shouldAutoDelete(withFile(), 47 * HOUR, '2d', true)).toBe(false);
+    expect(shouldAutoDelete(withFile(), 168 * HOUR, '1w', true)).toBe(true);
+  });
+
+  it('keeps starred downloads unless asked', () => {
+    expect(shouldAutoDelete(withFile({ starred: true }), 0, 'played', false)).toBe(false);
+    expect(shouldAutoDelete(withFile({ starred: true }), 0, 'played', true)).toBe(true);
   });
 });

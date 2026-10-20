@@ -47,7 +47,7 @@ Node 24 (`.nvmrc`), Xcode (iOS Simulator), Android Studio (AVD). `npx expo start
 
 ## Downloads
 - `downloads/download-manager.ts` (`useDownloads`): queue (2 at a time) over `expo-file-system` into `Paths.document/downloads`; sets `downloadedUri`/`autoDownloaded` on the library episode state and keeps a small `entries` record for the Downloads screen. Undefined file system on web (`downloadsSupported`).
-- Pure rules live in `lib/downloads.ts` (`shouldAutoArchive`, `planAutoDownloads`, `downloadAllowed`); `downloads/auto.ts` applies them (foreground, feed refresh, an episode becoming played, setting changes; not on every progress save, to avoid wake-ups while listening). `downloads/background.ts` registers an hourly `expo-background-task` (OS-scheduled, best effort). Conditions come from `expo-battery` and `@react-native-community/netinfo` (`downloads/conditions.ts`).
+- Pure rules live in `lib/downloads.ts` (`shouldAutoArchive`, `shouldAutoDelete` (same periods; the old "delete when finished" setting became `autoDelete`), `planAutoDownloads`, `downloadAllowed`); `downloads/auto.ts` applies them (foreground, feed refresh, an episode becoming played, setting changes; not on every progress save, to avoid wake-ups while listening). `downloads/background.ts` registers an hourly `expo-background-task` (OS-scheduled, best effort). Conditions come from `expo-battery` and `@react-native-community/netinfo` (`downloads/conditions.ts`).
 - Native modules added for this: netinfo, expo-battery, expo-background-task, expo-task-manager. Needs a rebuild.
 
 ## New-episode notifications

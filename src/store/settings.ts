@@ -8,7 +8,8 @@ export type SettingsData = {
   skipBackSec: number;
   skipForwardSec: number;
   playbackRate: number;
-  deleteOnFinish: boolean;
+  /** Delete the downloaded file of a played episode after this long (same periods as auto archive). */
+  autoDelete: ArchiveRule;
   /** Resume 2 s before where you left off. */
   intelligentResume: boolean;
   /** Ask before streaming over mobile data. */
@@ -36,7 +37,7 @@ const defaults: SettingsData = {
   skipBackSec: 15,
   skipForwardSec: 30,
   playbackRate: 1,
-  deleteOnFinish: false,
+  autoDelete: 'never',
   intelligentResume: true,
   warnMobileData: true,
   autoRestartSleepTimer: false,
@@ -65,6 +66,8 @@ export function createSettingsStore(storage: KV = kv) {
           const saved = JSON.parse(raw) as Partial<SettingsData>;
           // Keep only known keys so settings that no longer exist (e.g. wifiOnly) are dropped.
           const known = Object.fromEntries(Object.entries(saved).filter(([k]) => k in defaults));
+          // "Delete episode when finished" became Auto delete > After playing.
+          if ((saved as { deleteOnFinish?: boolean }).deleteOnFinish && saved.autoDelete === undefined) known.autoDelete = 'played';
           set({ ...defaults, ...known });
         }
       } catch {
@@ -81,7 +84,7 @@ export function createSettingsStore(storage: KV = kv) {
       skipBackSec: s.skipBackSec,
       skipForwardSec: s.skipForwardSec,
       playbackRate: s.playbackRate,
-      deleteOnFinish: s.deleteOnFinish,
+      autoDelete: s.autoDelete,
       intelligentResume: s.intelligentResume,
       warnMobileData: s.warnMobileData,
       autoRestartSleepTimer: s.autoRestartSleepTimer,

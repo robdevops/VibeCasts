@@ -12,7 +12,7 @@ import { useSettings } from '@/store/settings';
 
 const STEPS = [5, 10, 15, 20, 30, 45, 60, 90];
 
-type BoolKey = 'lockScreenSkipBack' | 'lockScreenSkipForward' | 'deleteOnFinish' | 'intelligentResume' | 'warnMobileData' | 'autoRestartSleepTimer' | 'cacheWholeEpisodes';
+type BoolKey = 'lockScreenSkipBack' | 'lockScreenSkipForward' | 'intelligentResume' | 'warnMobileData' | 'autoRestartSleepTimer' | 'cacheWholeEpisodes';
 
 async function sharePlaybackLog() {
   const text = playerLog.text() || 'No playback events recorded yet.';
@@ -71,7 +71,6 @@ export default function SettingsScreen() {
         {toggle('Warn when using mobile data', 'Ask before streaming over mobile data, with options to allow once or always.', s.warnMobileData, 'warnMobileData')}
         {toggle('Auto restart sleep timer', 'If you resume within 5 minutes of the last pause, the sleep timer starts again.', s.autoRestartSleepTimer, 'autoRestartSleepTimer')}
         {toggle('Cache whole episodes', 'Download the whole episode as fast as possible while it plays, instead of keeping the radio awake to stream it. Saves battery; the temporary file is removed afterwards.', s.cacheWholeEpisodes, 'cacheWholeEpisodes')}
-        {toggle('Delete episode when finished', 'Removes the downloaded file once you finish listening.', s.deleteOnFinish, 'deleteOnFinish')}
         <ThemedText type="smallBold" themeColor="textSecondary" style={styles.section}>
           BLUETOOTH AND LOCK SCREEN
         </ThemedText>
