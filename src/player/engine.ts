@@ -1,6 +1,9 @@
 import Constants, { ExecutionEnvironment } from 'expo-constants';
+import { requireOptionalNativeModule } from 'expo';
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer, type AudioStatus } from 'expo-audio';
 import { AppState, Platform } from 'react-native';
+
+import type { HeadsetAction } from '@/lib/headset';
 
 export type NowPlayingMeta = { title: string; artist: string; artworkUrl?: string };
 
@@ -16,6 +19,20 @@ export type EngineStatus = {
   error?: boolean;
 };
 
+/** What the headset buttons do (the native session applies the seeks itself; episode changes come back as commands). */
+export type HeadsetControls = {
+  skipForward: HeadsetAction;
+  skipBack: HeadsetAction;
+  seekForward: HeadsetAction;
+  seekBack: HeadsetAction;
+  playPause: HeadsetAction;
+  forwardSec: number;
+  backSec: number;
+};
+
+/** Things only the app can do, asked for by a headset button. */
+export type EngineCommand = 'nextEpisode' | 'previousEpisode';
+
 /** The slice of audio functionality the player store needs. Faked in tests. */
 export interface PlayerEngine {
   /** Replace the source; playback stays paused until `play()`. */
@@ -26,7 +43,11 @@ export interface PlayerEngine {
   setRate(rate: number): void;
   /** Which skip buttons the lock screen, notification and headset controls offer. */
   setLockScreenButtons(buttons: { back: boolean; forward: boolean }): void;
+  /** Configure the headset / Bluetooth buttons (Android; a no-op elsewhere and on builds without the support). */
+  setHeadsetControls(controls: HeadsetControls): void;
   subscribe(listener: (s: EngineStatus) => void): () => void;
+  /** Headset buttons set to "next / previous episode". */
+  subscribeCommands(listener: (c: EngineCommand) => void): () => void;
 }
 
 /**
@@ -58,6 +79,7 @@ export function createExpoEngine(): PlayerEngine {
   let pendingRate = 1;
   let applied = false;
   const listeners = new Set<(s: EngineStatus) => void>();
+  const commandListeners = new Set<(c: EngineCommand) => void>();
   let modeReady: Promise<void> | null = null;
   let buttons = { back: true, forward: true };
 
@@ -126,6 +148,10 @@ export function createExpoEngine(): PlayerEngine {
       };
       listeners.forEach((l) => l(status));
     });
+    // Headset next / previous presses set to "episode" (sent by the patched native session).
+    (player as unknown as { addListener(event: string, cb: (e: { command?: string }) => void): unknown }).addListener('mediaCommand', (e) => {
+      if (e?.command === 'nextEpisode' || e?.command === 'previousEpisode') commandListeners.forEach((l) => l(e.command as EngineCommand));
+    });
     return player;
   };
 
@@ -164,9 +190,23 @@ export function createExpoEngine(): PlayerEngine {
       // Re-apply to a session that is already showing controls.
       if (applied) activateLockScreen();
     },
+    setHeadsetControls(c) {
+      if (Platform.OS !== 'android') return;
+      try {
+        const native = requireOptionalNativeModule<{ setHeadsetControls?: (...a: (string | number)[]) => void }>('ExpoAudio');
+        // Missing on a build made before this support was added: skip quietly.
+        native?.setHeadsetControls?.(c.skipForward, c.skipBack, c.seekForward, c.seekBack, c.playPause, c.forwardSec, c.backSec);
+      } catch {
+        // Headset remapping is a nicety; never let it break playback.
+      }
+    },
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
+    },
+    subscribeCommands(listener) {
+      commandListeners.add(listener);
+      return () => commandListeners.delete(listener);
     },
   };
 }

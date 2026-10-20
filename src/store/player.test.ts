@@ -16,7 +16,7 @@ jest.mock('expo-network', () => ({ getNetworkStateAsync: jest.fn(), NetworkState
 jest.mock('expo-file-system', () => ({ Directory: class {}, File: class {}, Paths: { cache: '' } }));
 // The module-level singleton builds a real engine on import; give it a no-op one.
 jest.mock('@/player/engine', () => ({
-  createExpoEngine: () => ({ load() {}, play() {}, pause() {}, seekTo() {}, setRate() {}, setLockScreenButtons() {}, subscribe: () => () => {} }),
+  createExpoEngine: () => ({ load() {}, play() {}, pause() {}, seekTo() {}, setRate() {}, setLockScreenButtons() {}, setHeadsetControls() {}, subscribe: () => () => {}, subscribeCommands: () => () => {} }),
 }));
 
 const podcast: Podcast = { id: 'p', title: 'Show', author: 'A', artwork: 'art', feedUrl: 'https://f' };
@@ -751,5 +751,52 @@ describe('Up Next', () => {
     t.emit({ positionSec: 1800, finished: true, playing: false });
     expect(t.player.getState().current?.episode.id).toBe('e');
     expect(t.player.getState().playing).toBe(false);
+  });
+});
+
+describe('headset buttons', () => {
+  const second: Episode = { ...episode, id: 'e2', audioUrl: 'https://b.mp3' };
+  const queued = toRef(second, podcast);
+
+  it('tells the player what each button does, with the app skip lengths', () => {
+    const t = setup();
+    t.settings.getState().set({ headsetSkipForward: 'episode', headsetPlayPause: 'none', skipBackSec: 20, skipForwardSec: 45 });
+    expect(t.headset.current).toEqual({ skipForward: 'episode', skipBack: 'seek', seekForward: 'seek', seekBack: 'seek', playPause: 'none', forwardSec: 45, backSec: 20 });
+  });
+
+  it('next episode plays the next queued one', () => {
+    const t = setup();
+    t.player.getState().play(episode, podcast);
+    t.setQueue([queued]);
+    t.command('nextEpisode');
+    expect(t.player.getState().current?.episode.id).toBe('e2');
+    expect(t.queueLeft()).toEqual([]);
+  });
+
+  it('next episode with an empty queue changes nothing', () => {
+    const t = setup();
+    t.player.getState().play(episode, podcast);
+    t.command('nextEpisode');
+    expect(t.player.getState().current?.episode.id).toBe('e');
+  });
+
+  it('previous restarts an episode that has played a while', () => {
+    const t = setup();
+    t.player.getState().play(episode, podcast);
+    t.emit({ positionSec: 60, playing: true });
+    t.command('previousEpisode');
+    expect(t.calls.at(-1)).toBe('seek 0');
+    expect(t.player.getState().current?.episode.id).toBe('e');
+  });
+
+  it('previous near the start goes back to the episode before', () => {
+    const t = setup();
+    t.player.getState().play(episode, podcast);
+    t.player.getState().play(second, podcast);
+    t.command('previousEpisode');
+    expect(t.player.getState().current?.episode.id).toBe('e');
+    // Going back does not make the second episode "previous" of the first one's history entry twice.
+    t.command('previousEpisode');
+    expect(t.player.getState().current?.episode.id).toBe('e');
   });
 });
