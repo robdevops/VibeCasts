@@ -7,7 +7,7 @@ import { RATE_PRESETS, formatRate, stepRate } from '@/lib/player-math';
 
 type Props = { visible: boolean; rate: number; onChange: (rate: number) => void; onClose: () => void };
 
-const ACCENT = '#FF5A52';
+const ACCENT = '#B79CFF';
 
 export function SpeedSheet({ visible, rate, onChange, onClose }: Props) {
   return (
@@ -30,7 +30,7 @@ export function SpeedSheet({ visible, rate, onChange, onClose }: Props) {
             accessibilityRole="button"
             accessibilityState={{ selected: r === rate }}
             onPress={() => onChange(r)}
-            style={[styles.chip, { borderColor: r === rate ? ACCENT : 'rgba(255,255,255,0.25)', backgroundColor: r === rate ? 'rgba(255,90,82,0.18)' : 'transparent' }]}>
+            style={[styles.chip, { borderColor: r === rate ? ACCENT : 'rgba(255,255,255,0.25)', backgroundColor: r === rate ? 'rgba(183,156,255,0.18)' : 'transparent' }]}>
             <ThemedText type="smallBold" style={{ color: r === rate ? ACCENT : '#fff' }}>
               {formatRate(r)}
             </ThemedText>

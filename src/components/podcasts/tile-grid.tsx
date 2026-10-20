@@ -486,10 +486,10 @@ export function TileGrid({
           style={[
             styles.remove,
             { height: removeBottom, paddingTop: insets.top, top: -removeBottom },
-            { backgroundColor: overRemove ? theme.accent : theme.accentSoft },
+            { backgroundColor: overRemove ? theme.danger : theme.dangerSoft },
           ]}>
-          <Icon name="delete-outline" size={26} color={overRemove ? '#fff' : theme.accent} />
-          <ThemedText type="smallBold" style={{ color: overRemove ? '#fff' : theme.accent }}>
+          <Icon name="delete-outline" size={26} color={overRemove ? '#fff' : theme.danger} />
+          <ThemedText type="smallBold" style={{ color: overRemove ? '#fff' : theme.danger }}>
             {removeLabel}
           </ThemedText>
         </View>
