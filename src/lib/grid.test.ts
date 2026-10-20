@@ -62,10 +62,10 @@ describe('mountedRange', () => {
     expect(mountedRange(r, { start: 3, end: 27 }, cols)).toEqual({ start: 0, end: 30 }); // a small scroll back unmounts nothing
   });
 
-  it('lets go of tiles once they are far (more than 14 rows) away', () => {
-    expect(mountedRange({ start: 0, end: 24 }, { start: 60, end: 84 }, cols, 14)).toEqual({ start: 60, end: 84 });
-    expect(mountedRange({ start: 0, end: 30 }, { start: 48, end: 72 }, cols, 14)).toEqual({ start: 48, end: 72 }); // the old start is 16 rows behind: dropped
-    expect(mountedRange({ start: 0, end: 30 }, { start: 30, end: 54 }, cols, 14)).toEqual({ start: 0, end: 54 }); // only 10 rows behind: kept
+  it('lets go of tiles once they are far (more than 6 rows) away', () => {
+    expect(mountedRange({ start: 0, end: 24 }, { start: 60, end: 84 }, cols)).toEqual({ start: 60, end: 84 });
+    expect(mountedRange({ start: 0, end: 30 }, { start: 30, end: 54 }, cols)).toEqual({ start: 30, end: 54 }); // the old start is 10 rows behind: dropped
+    expect(mountedRange({ start: 0, end: 30 }, { start: 12, end: 36 }, cols)).toEqual({ start: 0, end: 36 }); // only 4 rows behind: kept
   });
 
   it('never keeps more than the cap', () => {
