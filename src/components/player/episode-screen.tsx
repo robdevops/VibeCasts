@@ -33,9 +33,9 @@ import { SwipeIgnore, TabPager } from './tab-pager';
 import { SleepSheet } from './sleep-sheet';
 import { SpeedSheet } from './speed-sheet';
 
-const BG = '#2A0C0C';
+const BG = '#1A0F2E';
 const MUTED = 'rgba(255,255,255,0.65)';
-const ACCENT = '#FF5A52';
+const ACCENT = '#B79CFF';
 
 type Tab = 'playing' | 'details' | 'bookmarks';
 type Sheet = 'speed' | 'sleep' | 'menu' | null;
