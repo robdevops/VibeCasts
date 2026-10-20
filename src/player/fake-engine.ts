@@ -1,8 +1,11 @@
-import type { EngineStatus, NowPlayingMeta, PlayerEngine } from './engine';
+import type { EngineCommand, EngineStatus, HeadsetControls, NowPlayingMeta, PlayerEngine } from './engine';
 
 /** In-memory engine for tests: records calls and lets the test push status updates. */
 export function createFakeEngine() {
   const listeners = new Set<(s: EngineStatus) => void>();
+  const commandListeners = new Set<(c: EngineCommand) => void>();
+  /** The last headset configuration the store applied. */
+  const headset: { current: HeadsetControls | null } = { current: null };
   const calls: string[] = [];
   /** Lock-screen button settings the store applied (kept apart from `calls` so those stay about playback). */
   const buttonCalls: string[] = [];
@@ -53,9 +56,16 @@ export function createFakeEngine() {
     setLockScreenButtons(b) {
       buttonCalls.push(`back=${b.back} forward=${b.forward}`);
     },
+    setHeadsetControls(c) {
+      headset.current = c;
+    },
     subscribe(l) {
       listeners.add(l);
       return () => listeners.delete(l);
+    },
+    subscribeCommands(l) {
+      commandListeners.add(l);
+      return () => commandListeners.delete(l);
     },
   };
   // What a reset player looks like after a long screen-off: back at 0:00, not playing.
@@ -65,5 +75,5 @@ export function createFakeEngine() {
     emit({ positionSec: 0, playing: false });
   };
   const applyStart = () => emit({ positionSec: state.pendingStart });
-  return { engine, calls, buttonCalls, state, emit, reset, applyStart, fail: () => emit({ error: true, playing: false, loaded: false }) };
+  return { engine, calls, buttonCalls, headset, command: (c: EngineCommand) => commandListeners.forEach((l) => l(c)), state, emit, reset, applyStart, fail: () => emit({ error: true, playing: false, loaded: false }) };
 }

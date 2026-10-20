@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { kv } from '@/db/kv';
 import type { KV } from '@/db/storage';
 import type { ArchiveRule, NetworkRule } from '@/lib/downloads';
+import { HEADSET_DEFAULTS, sanitizeHeadsetAction, type HeadsetAction } from '@/lib/headset';
 
 export type SettingsData = {
   skipBackSec: number;
@@ -31,6 +32,12 @@ export type SettingsData = {
   /** Show the skip-back / skip-forward buttons on the lock screen, notification and headset controls. */
   lockScreenSkipBack: boolean;
   lockScreenSkipForward: boolean;
+  /** What each headset / Bluetooth button does (see lib/headset.ts). */
+  headsetSkipForward: HeadsetAction;
+  headsetSkipBack: HeadsetAction;
+  headsetSeekForward: HeadsetAction;
+  headsetSeekBack: HeadsetAction;
+  headsetPlayPause: HeadsetAction;
 };
 
 const defaults: SettingsData = {
@@ -49,7 +56,23 @@ const defaults: SettingsData = {
   downloadNetwork: 'wifi',
   lockScreenSkipBack: true,
   lockScreenSkipForward: true,
+  headsetSkipForward: HEADSET_DEFAULTS.skipForward,
+  headsetSkipBack: HEADSET_DEFAULTS.skipBack,
+  headsetSeekForward: HEADSET_DEFAULTS.seekForward,
+  headsetSeekBack: HEADSET_DEFAULTS.seekBack,
+  headsetPlayPause: HEADSET_DEFAULTS.playPause,
 };
+
+/** Saved headset actions that are no longer valid fall back to the defaults. */
+function sanitizedHeadset(saved: Record<string, unknown>): Partial<SettingsData> {
+  return {
+    headsetSkipForward: sanitizeHeadsetAction('skipForward', saved.headsetSkipForward),
+    headsetSkipBack: sanitizeHeadsetAction('skipBack', saved.headsetSkipBack),
+    headsetSeekForward: sanitizeHeadsetAction('seekForward', saved.headsetSeekForward),
+    headsetSeekBack: sanitizeHeadsetAction('seekBack', saved.headsetSeekBack),
+    headsetPlayPause: sanitizeHeadsetAction('playPause', saved.headsetPlayPause),
+  };
+}
 
 type Actions = { hydrated: boolean; hydrate(): Promise<void>; set(patch: Partial<SettingsData>): void };
 
@@ -68,7 +91,7 @@ export function createSettingsStore(storage: KV = kv) {
           const known = Object.fromEntries(Object.entries(saved).filter(([k]) => k in defaults));
           // "Delete episode when finished" became Auto delete > After playing.
           if ((saved as { deleteOnFinish?: boolean }).deleteOnFinish && saved.autoDelete === undefined) known.autoDelete = 'played';
-          set({ ...defaults, ...known });
+          set({ ...defaults, ...known, ...sanitizedHeadset(known) });
         }
       } catch {
         // Fall back to defaults.
@@ -96,6 +119,11 @@ export function createSettingsStore(storage: KV = kv) {
       downloadNetwork: s.downloadNetwork,
       lockScreenSkipBack: s.lockScreenSkipBack,
       lockScreenSkipForward: s.lockScreenSkipForward,
+      headsetSkipForward: s.headsetSkipForward,
+      headsetSkipBack: s.headsetSkipBack,
+      headsetSeekForward: s.headsetSeekForward,
+      headsetSeekBack: s.headsetSeekBack,
+      headsetPlayPause: s.headsetPlayPause,
     };
     storage.setItem(STORAGE_KEY, JSON.stringify(data)).catch(() => {});
   });
