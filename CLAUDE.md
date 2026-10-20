@@ -25,6 +25,7 @@ Node 24 (`.nvmrc`), Xcode (iOS Simulator), Android Studio (AVD). `npx expo start
 ## Gotchas
 - Gesture objects in `TileGrid` cells are memoised on purpose: recreating a `Gesture` on re-render cancels an in-progress drag. Keep handlers stable (see the `latest` ref there).
 - Use `sharedValue.set()`/`.get()` for writes (the React Compiler lint rule rejects `.value =`).
+- Worklets (`useAnimatedStyle`, gesture `.onBegin/.onUpdate/.onEnd`) must not contain inline arrow functions (`.map(x => …)`, `.some(...)`, `interpolate` is fine): the React Compiler hoists them out as plain functions and native crashes with "Tried to synchronously call a Remote Function". Use plain `for` loops. Web runs everything on one thread, so it won't catch this.
 - Artwork is wrapped in `pointerEvents="none"`: on web an `<img>` starts a native drag and cancels gestures.
 - In SDK 57 native tabs are imported from `expo-router/unstable-native-tabs`.
 

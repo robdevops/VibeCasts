@@ -68,7 +68,12 @@ export function TabPager<T extends string>({ tabs, tab, onTab, panels, x }: Prop
     .failOffsetY([-12, 12])
     .onBegin((e) => {
       cancelAnimation(x); // grab the page even while it is still settling from the last swipe
-      ignoring.set(zones.get().some((z) => e.y >= z.y - SLACK && e.y <= z.y + z.h + SLACK));
+      // A plain loop: inline arrow functions inside a worklet get hoisted out and can't run on the UI thread.
+      ignoring.set(false);
+      const zs = zones.get();
+      for (let i = 0; i < zs.length; i++) {
+        if (e.y >= zs[i].y - SLACK && e.y <= zs[i].y + zs[i].h + SLACK) ignoring.set(true);
+      }
       start.set(x.get());
     })
     .onUpdate((e) => {
