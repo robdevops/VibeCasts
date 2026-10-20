@@ -6,10 +6,11 @@ import { kv } from '@/db/kv';
 import type { KV } from '@/db/storage';
 import { emptyEpisodeState, episodeKey, isFinished } from '@/lib/episode-state';
 import { clampSeek, reachedSkipLast, startPosition } from '@/lib/player-math';
-import { fromRef, type EpisodeRef } from '@/lib/playlist';
+import { PREVIOUS_RESTART_SEC } from '@/lib/headset';
+import { fromRef, toRef, type EpisodeRef } from '@/lib/playlist';
 import { isLostPlace, isPlausibleAdvance, resumeFrom, shouldRestartSleep } from '@/lib/playback-rules';
 import { createFileEpisodeCache, type EpisodeCache } from '@/downloads/episode-cache';
-import { createExpoEngine, type EngineStatus, type PlayerEngine } from '@/player/engine';
+import { createExpoEngine, type EngineCommand, type EngineStatus, type PlayerEngine } from '@/player/engine';
 import { playerLog, type EventLog } from '@/player/event-log';
 import { confirmStreaming } from '@/player/stream-guard';
 
@@ -117,6 +118,9 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
   let lastLogged = '';
   let lastBeat = 0;
   let sleepTimer: ReturnType<typeof setTimeout> | undefined;
+  // Episodes played before the current one (newest last), for the headset "previous episode" action.
+  const history: EpisodeRef[] = [];
+  let goingBack = false;
 
   const store = create<PlayerData & Actions>()((set, get) => {
     const keyOf = () => {
@@ -495,6 +499,13 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
           if (!get().playing) resumeLoaded();
           return;
         }
+        // Remember what was playing so "previous episode" can come back to it (not when that is how we got here).
+        const before = get().current;
+        if (before && episodeKey(before.podcast.id, before.episode.id) !== key && !goingBack) {
+          history.push(toRef(before.episode, before.podcast));
+          if (history.length > 20) history.shift();
+        }
+        goingBack = false;
         if (get().playing) {
           // Silence the old episode at once; the new one may take a moment to load (or wait on a data prompt).
           saveProgress();
@@ -586,9 +597,43 @@ export function createPlayerStore(deps: Partial<Deps> = {}) {
   const applyButtons = () => {
     const s = settings.getState();
     engine.setLockScreenButtons({ back: s.lockScreenSkipBack, forward: s.lockScreenSkipForward });
+    engine.setHeadsetControls({
+      skipForward: s.headsetSkipForward,
+      skipBack: s.headsetSkipBack,
+      seekForward: s.headsetSeekForward,
+      seekBack: s.headsetSeekBack,
+      playPause: s.headsetPlayPause,
+      forwardSec: s.skipForwardSec,
+      backSec: s.skipBackSec,
+    });
   };
   applyButtons();
   settings.subscribe(applyButtons);
+
+  // Headset buttons set to "next / previous episode".
+  engine.subscribeCommands((command: EngineCommand) => {
+    log.add('headset', { command });
+    if (command === 'nextEpisode') {
+      const next = queue.take();
+      if (!next) {
+        useToast.getState().show('Nothing in Up Next.');
+        return;
+      }
+      const { episode, podcast } = fromRef(next);
+      store.getState().play(episode, podcast);
+      return;
+    }
+    // Previous: restart this episode if it has played a while, otherwise go back to the one before it.
+    const before = history.pop();
+    if (livePosition > PREVIOUS_RESTART_SEC || !before) {
+      if (before) history.push(before);
+      store.getState().seekTo(0);
+      return;
+    }
+    const { episode, podcast } = fromRef(before);
+    goingBack = true;
+    store.getState().play(episode, podcast);
+  });
 
   return store;
 }

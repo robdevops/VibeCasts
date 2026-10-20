@@ -1,3 +1,35 @@
+diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioModule.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioModule.kt
+index 992239b..a319a1d 100644
+--- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioModule.kt
++++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioModule.kt
+@@ -28,6 +28,7 @@ import androidx.media3.exoplayer.hls.HlsMediaSource
+ import androidx.media3.exoplayer.smoothstreaming.SsMediaSource
+ import androidx.media3.exoplayer.source.MediaSource
+ import androidx.media3.exoplayer.source.ProgressiveMediaSource
++import expo.modules.audio.service.HeadsetControls
+ import expo.modules.interfaces.permissions.Permissions
+ import expo.modules.kotlin.Promise
+ import expo.modules.kotlin.exception.Exceptions
+@@ -208,6 +209,19 @@ class AudioModule : Module() {
+       context.registerReceiver(ringerModeReceiver, IntentFilter(AudioManager.RINGER_MODE_CHANGED_ACTION))
+     }
+ 
++    // What the headset / Bluetooth transport buttons do (see HeadsetControls); the app pushes this whenever it changes.
++    Function("setHeadsetControls") {
++        skipForward: String, skipBack: String, seekForward: String, seekBack: String, playPause: String,
++        forwardSec: Double, backSec: Double ->
++      HeadsetControls.skipForward = skipForward
++      HeadsetControls.skipBack = skipBack
++      HeadsetControls.seekForward = seekForward
++      HeadsetControls.seekBack = seekBack
++      HeadsetControls.playPause = playPause
++      HeadsetControls.forwardMs = (forwardSec * 1000).toLong()
++      HeadsetControls.backMs = (backSec * 1000).toLong()
++    }
++
+     AsyncFunction("setAudioModeAsync") { mode: AudioMode ->
+       shouldPlayInBackground = mode.shouldPlayInBackground
+       interruptionMode = mode.interruptionMode
 diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlayer.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlayer.kt
 index c76a9fd..84cacb2 100644
 --- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlayer.kt
@@ -12,3 +44,183 @@ index c76a9fd..84cacb2 100644
      .setSeekForwardIncrementMs(SEEK_JUMP_INTERVAL_MS)
      .setSeekBackIncrementMs(SEEK_JUMP_INTERVAL_MS)
      .apply {
+diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
+index 196a5d5..f364309 100644
+--- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
++++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
+@@ -88,8 +88,8 @@ class AudioControlsService : MediaSessionService() {
+             currentPlayerRef.play()
+           }
+ 
+-        ACTION_SEEK_FORWARD -> currentPlayerRef.seekTo(currentPlayerRef.currentPosition + SEEK_INTERVAL_MS)
+-        ACTION_SEEK_BACKWARD -> currentPlayerRef.seekTo(currentPlayerRef.currentPosition - SEEK_INTERVAL_MS)
++        ACTION_SEEK_FORWARD -> currentPlayerRef.seekTo(currentPlayerRef.currentPosition + HeadsetControls.forwardMs)
++        ACTION_SEEK_BACKWARD -> currentPlayerRef.seekTo((currentPlayerRef.currentPosition - HeadsetControls.backMs).coerceAtLeast(0L))
+       }
+     }
+ 
+@@ -367,7 +367,10 @@ class AudioControlsService : MediaSessionService() {
+ 
+       appContext?.mainQueue?.launch {
+         val context = appContext?.reactContext ?: return@launch
+-        val sessionPlayer = MetadataInjectingPlayer(resolveSessionPlayer(player, options)).apply {
++        val sessionPlayer = MetadataInjectingPlayer(
++          resolveSessionPlayer(player, options),
++          onCommand = { command -> player.emit("mediaCommand", mapOf("command" to command)) }
++        ).apply {
+           updateMetadata(metadata)
+         }
+         val session = MediaSession.Builder(context, sessionPlayer)
+@@ -448,7 +451,10 @@ class AudioControlsService : MediaSessionService() {
+       sessionMetadataPlayer = null
+       appContext?.mainQueue?.launch {
+         val context = appContext?.reactContext ?: return@launch
+-        val sessionPlayer = MetadataInjectingPlayer(resolveSessionPlayer(player, options)).apply {
++        val sessionPlayer = MetadataInjectingPlayer(
++          resolveSessionPlayer(player, options),
++          onCommand = { command -> player.emit("mediaCommand", mapOf("command" to command)) }
++        ).apply {
+           updateMetadata(metadata)
+         }
+         val session = MediaSession.Builder(context, sessionPlayer)
+diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioMediaSessionCallback.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioMediaSessionCallback.kt
+index 839aaef..fdfc218 100644
+--- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioMediaSessionCallback.kt
++++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioMediaSessionCallback.kt
+@@ -24,11 +24,12 @@ class AudioMediaSessionCallback : MediaSession.Callback {
+             .add(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
+             .add(Player.COMMAND_SEEK_FORWARD)
+             .add(Player.COMMAND_SEEK_BACK)
+-            // Remove track navigation commands
+-            .remove(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+-            .remove(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+-            .remove(Player.COMMAND_SEEK_TO_PREVIOUS)
+-            .remove(Player.COMMAND_SEEK_TO_NEXT)
++            // Track navigation stays available: headset next/previous buttons arrive as these commands and are
++            // remapped by MetadataInjectingPlayer (see HeadsetControls).
++            .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
++            .add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
++            .add(Player.COMMAND_SEEK_TO_PREVIOUS)
++            .add(Player.COMMAND_SEEK_TO_NEXT)
+             .build()
+         )
+         .setAvailableSessionCommands(
+@@ -51,10 +52,10 @@ class AudioMediaSessionCallback : MediaSession.Callback {
+   ): ListenableFuture<SessionResult> {
+     when (command.customAction) {
+       AudioControlsService.ACTION_SEEK_FORWARD -> {
+-        session.player.seekTo(session.player.currentPosition + AudioControlsService.SEEK_INTERVAL_MS)
++        session.player.seekTo(session.player.currentPosition + HeadsetControls.forwardMs)
+       }
+       AudioControlsService.ACTION_SEEK_BACKWARD -> {
+-        session.player.seekTo(session.player.currentPosition - AudioControlsService.SEEK_INTERVAL_MS)
++        session.player.seekTo((session.player.currentPosition - HeadsetControls.backMs).coerceAtLeast(0L))
+       }
+     }
+     return super.onCustomCommand(session, controller, command, args)
+diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/HeadsetControls.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/HeadsetControls.kt
+new file mode 100644
+index 0000000..80a4413
+--- /dev/null
++++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/HeadsetControls.kt
+@@ -0,0 +1,24 @@
++package expo.modules.audio.service
++
++/**
++ * What the headset / Bluetooth / lock-screen transport buttons do. Set from the app
++ * (`setHeadsetControls`), read by the media session's player wrapper.
++ */
++object HeadsetControls {
++  const val NONE = "none"
++  const val SEEK = "seek"
++  const val EPISODE = "episode"
++  const val TOGGLE = "toggle"
++
++  /** Action for the "next track" button, "previous track" button, fast-forward, rewind: NONE, SEEK or EPISODE. */
++  @Volatile var skipForward: String = SEEK
++  @Volatile var skipBack: String = SEEK
++  @Volatile var seekForward: String = SEEK
++  @Volatile var seekBack: String = SEEK
++
++  /** Play/pause button: TOGGLE or NONE. */
++  @Volatile var playPause: String = TOGGLE
++
++  @Volatile var forwardMs: Long = 30_000L
++  @Volatile var backMs: Long = 15_000L
++}
+diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/MetadataInjectingPlayer.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/MetadataInjectingPlayer.kt
+index 18203a3..c78635f 100644
+--- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/MetadataInjectingPlayer.kt
++++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/MetadataInjectingPlayer.kt
+@@ -3,6 +3,7 @@ package expo.modules.audio.service
+ import android.os.Handler
+ import android.os.Looper
+ import androidx.core.net.toUri
++import androidx.media3.common.C
+ import androidx.media3.common.FlagSet
+ import androidx.media3.common.ForwardingPlayer
+ import androidx.media3.common.MediaMetadata
+@@ -16,12 +17,62 @@ import java.util.IdentityHashMap
+ // metadata updates without replacing the active media item on the real ExoPlayer instance.
+ @UnstableApi
+ internal class MetadataInjectingPlayer(
+-  player: Player
++  player: Player,
++  // Called (on the main thread) for actions only the app can do, e.g. "nextEpisode" / "previousEpisode".
++  private val onCommand: ((String) -> Unit)? = null
+ ) : ForwardingPlayer(player) {
+   private val handler = Handler(applicationLooper)
+   private val listeners = IdentityHashMap<Player.Listener, Player.Listener>()
+   private var injectedMetadata: Metadata? = null
+ 
++  // Headset / Bluetooth / lock-screen transport buttons arrive here (the session player), never from the app's own
++  // calls, so they can be remapped without touching playback. What each does comes from `HeadsetControls`.
++  override fun getAvailableCommands(): Player.Commands {
++    return super.getAvailableCommands().buildUpon()
++      .addAll(
++        Player.COMMAND_SEEK_TO_NEXT,
++        Player.COMMAND_SEEK_TO_PREVIOUS,
++        Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
++        Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM
++      )
++      .build()
++  }
++
++  override fun isCommandAvailable(command: Int): Boolean = availableCommands.contains(command)
++
++  private fun headsetAction(action: String, forward: Boolean, episodeCommand: String) {
++    when (action) {
++      HeadsetControls.NONE -> Unit
++      HeadsetControls.EPISODE -> onCommand?.invoke(episodeCommand)
++      else -> {
++        val step = if (forward) HeadsetControls.forwardMs else -HeadsetControls.backMs
++        var target = (currentPosition + step).coerceAtLeast(0L)
++        val total = duration
++        if (total != C.TIME_UNSET) target = target.coerceAtMost(total)
++        seekTo(target)
++      }
++    }
++  }
++
++  override fun seekToNext() = headsetAction(HeadsetControls.skipForward, true, "nextEpisode")
++  override fun seekToNextMediaItem() = headsetAction(HeadsetControls.skipForward, true, "nextEpisode")
++  override fun seekToPrevious() = headsetAction(HeadsetControls.skipBack, false, "previousEpisode")
++  override fun seekToPreviousMediaItem() = headsetAction(HeadsetControls.skipBack, false, "previousEpisode")
++  override fun seekForward() = headsetAction(HeadsetControls.seekForward, true, "nextEpisode")
++  override fun seekBack() = headsetAction(HeadsetControls.seekBack, false, "previousEpisode")
++
++  override fun play() {
++    if (HeadsetControls.playPause != HeadsetControls.NONE) super.play()
++  }
++
++  override fun pause() {
++    if (HeadsetControls.playPause != HeadsetControls.NONE) super.pause()
++  }
++
++  override fun setPlayWhenReady(playWhenReady: Boolean) {
++    if (HeadsetControls.playPause != HeadsetControls.NONE) super.setPlayWhenReady(playWhenReady)
++  }
++
+   override fun addListener(listener: Player.Listener) {
+     val forwardingListener = synchronized(listeners) {
+       listeners.getOrPut(listener) { MetadataForwardingListener(listener) }

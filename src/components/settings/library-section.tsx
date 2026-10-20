@@ -99,7 +99,7 @@ export function LibrarySection() {
   return (
     <View>
       <ThemedText type="smallBold" themeColor="textSecondary" style={styles.section}>
-        LIBRARY
+        IMPORT & EXPORT
       </ThemedText>
       <View style={[styles.card, { borderBottomColor: theme.border }]}>
         <ThemedText>Import and export</ThemedText>
