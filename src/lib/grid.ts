@@ -26,6 +26,20 @@ export function slotAt(x: number, y: number, m: GridMetrics, count: number): num
   return Math.min(count - 1, row * m.cols + col);
 }
 
+/** The tile (slot index) exactly under a point in content coordinates, or -1 for a gap, the padding or past the last tile. */
+export function tileAt(x: number, y: number, m: GridMetrics, count: number): number {
+  if (count <= 0 || m.tile <= 0) return -1;
+  const step = m.tile + m.gap;
+  const dx = x - m.pad;
+  const dy = y - m.pad;
+  if (dx < 0 || dy < 0) return -1;
+  const col = Math.floor(dx / step);
+  const row = Math.floor(dy / step);
+  if (col >= m.cols || dx - col * step > m.tile || dy - row * step > m.tile) return -1;
+  const index = row * m.cols + col;
+  return index < count ? index : -1;
+}
+
 /** True when the point is within `frac` of the tile size from the tile centre (both axes). */
 export function nearCenter(x: number, y: number, r: Rect, frac = 0.3): boolean {
   const cx = r.left + r.size / 2;
