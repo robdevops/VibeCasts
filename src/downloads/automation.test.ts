@@ -140,3 +140,30 @@ it('a failed download is reported and can be retried', async () => {
   expect(library.getState().episodes[key('e1')]?.downloadedUri).toBe('file:///x.mp3');
   expect(downloads.getState().failed[key('e1')]).toBeUndefined();
 });
+
+describe('downloads in progress', () => {
+  it('shows an episode as soon as it is queued, queued episodes wait for a slot, and they finish in order', async () => {
+    const library = createLibraryStore(createMemoryKV());
+    const gates: Record<string, () => void> = {};
+    const downloads = createDownloadManager({
+      files: {
+        fetch: (key) => new Promise((resolve) => (gates[key] = () => resolve({ uri: `file:///${key}.mp3`, sizeBytes: 5_000_000 }))),
+        remove() {},
+      },
+      storage: createMemoryKV(),
+      library,
+    });
+    for (const id of ['e1', 'e2', 'e3']) downloads.getState().download(ep(id), podcast);
+
+    const s = downloads.getState();
+    expect(Object.keys(s.entries)).toHaveLength(3); // known from the start, with titles
+    expect(s.entries[key('e1')].episode.title).toBe('e1');
+    expect(s.active).toEqual({ [key('e1')]: 'downloading', [key('e2')]: 'downloading', [key('e3')]: 'queued' });
+
+    gates[key('e1')]();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(downloads.getState().active).toEqual({ [key('e2')]: 'downloading', [key('e3')]: 'downloading' });
+    expect(library.getState().episodes[key('e1')].downloadedUri).toBe(`file:///${key('e1')}.mp3`);
+    expect(downloads.getState().entries[key('e1')].sizeBytes).toBe(5_000_000);
+  });
+});

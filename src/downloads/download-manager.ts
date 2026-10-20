@@ -26,8 +26,8 @@ export type DownloadEntry = {
 
 type Data = {
   entries: Record<string, DownloadEntry>;
-  /** In flight, by episode key. */
-  active: Record<string, true>;
+  /** In flight, by episode key: waiting its turn in the queue, or being fetched. */
+  active: Record<string, 'queued' | 'downloading'>;
   failed: Record<string, true>;
 };
 
@@ -119,22 +119,19 @@ export function createDownloadManager(deps: Partial<Deps> = {}) {
         if (!opts?.auto) library.getState().patchEpisode(key, { autoDownloaded: false });
         return;
       }
-      set((s) => ({ active: { ...s.active, [key]: true }, failed: omit(s.failed, key) }));
+      // Remember what it is straight away, so the Downloads screen can show it while it downloads.
+      const { description: _d, ...slim } = episode;
+      const entry: DownloadEntry = {
+        podcast: { id: podcast.id, title: podcast.title, artwork: podcast.artwork, author: podcast.author, feedUrl: podcast.feedUrl },
+        episode: slim,
+      };
+      set((s) => ({ active: { ...s.active, [key]: 'queued' }, failed: omit(s.failed, key), entries: { ...s.entries, [key]: entry } }));
       queue.push(async () => {
+        set((s) => ({ active: { ...s.active, [key]: 'downloading' } }));
         try {
           const { uri, sizeBytes } = await files.fetch(key, episode.audioUrl);
-          const { description: _d, ...slim } = episode;
           library.getState().patchEpisode(key, { downloadedUri: uri, downloadedAt: now(), autoDownloaded: !!opts?.auto });
-          set((s) => ({
-            entries: {
-              ...s.entries,
-              [key]: {
-                podcast: { id: podcast.id, title: podcast.title, artwork: podcast.artwork, author: podcast.author, feedUrl: podcast.feedUrl },
-                episode: slim,
-                sizeBytes,
-              },
-            },
-          }));
+          set((s) => ({ entries: { ...s.entries, [key]: { ...entry, sizeBytes } } }));
         } catch {
           set((s) => ({ failed: { ...s.failed, [key]: true } }));
         } finally {
