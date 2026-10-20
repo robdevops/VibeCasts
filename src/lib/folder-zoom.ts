@@ -14,6 +14,12 @@ export const ZOOM_MS = 500;
  */
 export const SHRINK_MS = 300;
 
+/**
+ * How a show opens from its tile: 'zoom' (the tile zooms towards you and fades, like a folder) or 'fly' (the tile's artwork
+ * glides to the artwork on the show's page). Closing always flies the artwork back to the tile.
+ */
+export const PODCAST_OPEN: 'zoom' | 'fly' = 'zoom';
+
 export type ZoomOrigin = { key: string; x: number; y: number; size: number };
 
 const stack: ZoomOrigin[] = [];

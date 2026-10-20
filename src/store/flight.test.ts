@@ -51,4 +51,12 @@ describe('artwork flight', () => {
     s().close('podcast:9', to);
     expect(s().phase).toBe('idle');
   });
+
+  it('without a flight out, it only remembers the tile and can still fly back', () => {
+    s().begin('podcast:1', 'art', 'Show', from, false);
+    expect(s().phase).toBe('open');
+    s().close('podcast:1', to);
+    expect(s().phase).toBe('closing');
+    expect(s().from).toEqual(from);
+  });
 });

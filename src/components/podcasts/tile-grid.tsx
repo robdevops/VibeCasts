@@ -19,7 +19,7 @@ import { Icon } from '@/components/ui/icon';
 import { HEADER_HEIGHT } from '@/components/ui/screen-header';
 import { useTheme } from '@/hooks/use-theme';
 import { contentHeight, metricsFor, mountedRange, nearCenter, slotAt, slotRect, tileAt, visibleRange, type GridMetrics } from '@/lib/grid';
-import { FOLDER_ZOOM, SHRINK_MS, pushZoomOrigin, ZOOM_MS } from '@/lib/folder-zoom';
+import { FOLDER_ZOOM, PODCAST_OPEN, SHRINK_MS, pushZoomOrigin, ZOOM_MS } from '@/lib/folder-zoom';
 import { useFlight } from '@/store/flight';
 import { parseKey, reorder } from '@/lib/layout';
 
@@ -107,6 +107,7 @@ export function TileGrid({
   const zoom = useSharedValue(0);
   const [zoomKey, setZoomKey] = useState<string | null>(null); // the folder being opened (its tile is drawn as a zooming copy)
   const zoomTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const zoomKind = useRef<'folder' | 'podcast'>('folder');
   const rootRef = useRef<View>(null);
   const focused = useIsFocused();
   const flightKey = useFlight((st) => (st.phase === 'idle' ? null : st.key)); // the show whose artwork is flying: its tile is empty meanwhile
@@ -349,25 +350,29 @@ export function TileGrid({
     if (FOLDER_ZOOM && item) {
       const rect = slotRect(at, m);
       const scroll = scrollNow.current;
-      if (item.kind === 'folder') {
-        // A folder: its tile zooms towards you, and the folder page shrinks back into it when it closes.
+      const info = item.kind === 'podcast' ? flightInfo?.(item) : undefined;
+      const flyOut = !!info && PODCAST_OPEN === 'fly';
+      if (!flyOut) {
+        // The tile zooms towards you and fades while the page fades in (a folder always; a show unless it flies out).
         if (zoomTimer.current) clearTimeout(zoomTimer.current);
         zoom.set(0);
+        zoomKind.current = item.kind;
         setZoomKey(item.key);
         zoom.set(withTiming(1, { duration: ZOOM_MS }));
+      }
+      const tileRect = { x: 0, y: 0, size: m.tile };
+      if (item.kind === 'folder') {
+        // A folder: its page shrinks back into the tile when it closes.
         const key = `folder:${parseKey(item.key).id}`;
         rootRef.current?.measureInWindow((x, y) =>
           pushZoomOrigin({ key, x: x + rect.left + m.tile / 2, y: y + rect.top + m.tile / 2 - scroll, size: m.tile }),
         );
-      } else {
-        // A show: its artwork flies from the tile to the artwork on the show's page, and back when the page closes.
-        const info = flightInfo?.(item);
-        if (info) {
-          const key = `podcast:${parseKey(item.key).id}`;
-          rootRef.current?.measureInWindow((x, y) =>
-            useFlight.getState().begin(key, info.uri, info.title, { x: x + rect.left, y: y + rect.top - scroll, size: m.tile }),
-          );
-        }
+      } else if (info) {
+        // A show: when its page closes the artwork flies from the page back to this tile (and, if it flies out, to the page too).
+        const key = `podcast:${parseKey(item.key).id}`;
+        rootRef.current?.measureInWindow((x, y) =>
+          useFlight.getState().begin(key, info.uri, info.title, { ...tileRect, x: x + rect.left, y: y + rect.top - scroll }, flyOut),
+        );
       }
     }
     if (item) onPress(item);
@@ -419,6 +424,12 @@ export function TileGrid({
     }
     if (!wasAway.current) return;
     wasAway.current = false;
+    if (zoomKind.current === 'podcast') {
+      // A show: its artwork flies back to this tile (the flight overlay), so the zoom copy is simply dropped.
+      zoom.set(0);
+      setZoomKey(null);
+      return;
+    }
     zoom.set(withTiming(0, { duration: SHRINK_MS, easing: Easing.out(Easing.cubic) }));
     zoomTimer.current = setTimeout(() => setZoomKey(null), SHRINK_MS + 30);
     return () => {
@@ -436,10 +447,18 @@ export function TileGrid({
     }, ZOOM_MS + 1500);
     return () => clearTimeout(t);
   }, [zoomKey, focused, zoom]);
-  // Safety net: this screen is back on top but a flight is still marked "open" (the page closed without reporting it), so
-  // hand the tile back rather than leave it empty.
+  // Safety net: this screen is back on top (after being left) but a flight is still marked "open" (the page closed without
+  // reporting it), so hand the tile back rather than leave it empty.
+  const leftDuringFlight = useRef(false);
   useEffect(() => {
-    if (focused && flightKey !== null && useFlight.getState().phase === 'open') useFlight.getState().end();
+    if (flightKey === null) {
+      leftDuringFlight.current = false;
+    } else if (!focused) {
+      leftDuringFlight.current = true;
+    } else if (leftDuringFlight.current) {
+      leftDuringFlight.current = false;
+      if (useFlight.getState().phase === 'open') useFlight.getState().end();
+    }
   }, [focused, flightKey]);
   const zoomStyle = useAnimatedStyle(() => {
     const z = zoom.get();
