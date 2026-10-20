@@ -2,7 +2,7 @@ import * as Haptics from 'expo-haptics';
 import { createContext, useContext, useEffect, useRef, type ReactNode, type RefObject } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
+import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
 /** A no-swipe area, in the pager's own coordinates (so it stays right while the player slides). */
@@ -21,6 +21,8 @@ type Props<T extends string> = {
   tab: T;
   onTab: (t: T) => void;
   panels: Record<T, ReactNode>;
+  /** Shared horizontal offset (0 .. -(n-1)*width), so the tab labels can follow the pager live. */
+  x: SharedValue<number>;
 };
 
 /**
@@ -28,33 +30,44 @@ type Props<T extends string> = {
  * pager). A swipe that starts on a `SwipeIgnore` area (the seek bar) is left to that control, and
  * vertical movement fails the gesture so panels still scroll.
  */
-export function TabPager<T extends string>({ tabs, tab, onTab, panels }: Props<T>) {
+export function TabPager<T extends string>({ tabs, tab, onTab, panels, x }: Props<T>) {
   const { width } = useWindowDimensions();
   const index = Math.max(0, tabs.indexOf(tab));
   const last = tabs.length - 1;
 
-  const x = useSharedValue(-index * width);
   const start = useSharedValue(0);
+  // The page the gesture is already settling on, so the state update that follows doesn't restart the animation.
+  const settlingOn = useSharedValue(index);
+  // What was last committed, so back-to-back swipes (before React re-renders) still tick once per change.
+  const committed = useSharedValue(index);
   const ignoring = useSharedValue(false);
   const zones = useSharedValue<Zone[]>([]);
   const container = useRef<View>(null);
 
+  // Start on the right page (the offset is owned by the caller).
+  useEffect(() => {
+    x.set(-index * width);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // A tab change from elsewhere (tapping the header) slides there too.
   useEffect(() => {
+    committed.set(index);
+    if (settlingOn.get() === index) return;
+    settlingOn.set(index);
     x.set(withTiming(-index * width, SETTLE));
-  }, [index, width, x]);
+  }, [index, width, x, settlingOn, committed]);
 
-  const choose = (i: number) => {
-    if (i !== index) {
-      onTab(tabs[i]);
-      Haptics.selectionAsync().catch(() => {});
-    }
+  const commit = (i: number) => onTab(tabs[i]);
+  const tick = () => {
+    Haptics.selectionAsync().catch(() => {});
   };
 
   const pan = Gesture.Pan()
     .activeOffsetX([-15, 15])
     .failOffsetY([-12, 12])
     .onBegin((e) => {
+      cancelAnimation(x); // grab the page even while it is still settling from the last swipe
       ignoring.set(zones.get().some((z) => e.y >= z.y - SLACK && e.y <= z.y + z.h + SLACK));
       start.set(x.get());
     })
@@ -65,9 +78,16 @@ export function TabPager<T extends string>({ tabs, tab, onTab, panels }: Props<T
     .onEnd((e) => {
       if (ignoring.get()) return;
       const projected = x.get() + e.velocityX * FLING;
-      const target = Math.min(last, Math.max(0, Math.round(-projected / width)));
+      // A fast flick moves one tab, never two: stay within one page of where the drag began.
+      const from = Math.round(-start.get() / width);
+      const target = Math.min(last, from + 1, Math.max(0, from - 1, Math.round(-projected / width)));
+      settlingOn.set(target);
       x.set(withTiming(-target * width, SETTLE));
-      scheduleOnRN(choose, target);
+      if (target !== committed.get()) {
+        committed.set(target);
+        scheduleOnRN(tick);
+      }
+      scheduleOnRN(commit, target);
     });
 
   const style = useAnimatedStyle(() => ({ transform: [{ translateX: x.get() }] }));
