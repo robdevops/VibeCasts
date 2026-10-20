@@ -19,6 +19,12 @@ import { useTheme } from '@/hooks/use-theme';
 import { contentHeight, metricsFor, mountedRange, nearCenter, slotAt, slotRect, tileAt, visibleRange, type GridMetrics } from '@/lib/grid';
 import { reorder } from '@/lib/layout';
 
+/**
+ * Opening a folder zooms the grid towards you (see `ZoomFrame`). Switched off for now while checking how scrolling
+ * feels without it: flip to true to bring it back (the folder page still fades in).
+ */
+const FOLDER_ZOOM = false;
+
 export type GridItem = { key: string; kind: 'podcast' | 'folder' };
 
 type Props = {
@@ -338,7 +344,7 @@ export function TileGrid({
     const keys = order ?? items.map((i) => i.key);
     const at = tileAt(x, y, m, keys.length);
     const item = at >= 0 ? byKey.get(keys[at]) : undefined;
-    if (item?.kind === 'folder') {
+    if (FOLDER_ZOOM && item?.kind === 'folder') {
       const rect = slotRect(at, m);
       zoomX.set(rect.left + m.tile / 2);
       zoomY.set(rect.top + m.tile / 2 - scrollNow.current);
@@ -385,20 +391,16 @@ export function TileGrid({
     };
   });
   useEffect(() => {
-    if (focused && zoomed.current) {
+    if (FOLDER_ZOOM && focused && zoomed.current) {
       zoomed.current = false;
       zoom.set(withTiming(0, { duration: 280 }));
     }
   }, [focused, zoom]);
-  const zoomStyle = useAnimatedStyle(() => {
-    const z = zoom.get();
-    return { opacity: 1 - z, transform: [{ scale: 1 + z * 1.6 }], transformOrigin: [zoomX.get(), zoomY.get(), 0] };
-  });
   const ghostItem = ghostKey ? byKey.get(ghostKey) : undefined;
   const dragging = activeKey !== null;
 
   return (
-    <Animated.View style={[styles.fill, zoomStyle]} onLayout={onLayout}>
+    <Frame zoom={zoom} zoomX={zoomX} zoomY={zoomY} onLayout={onLayout}>
       <ScrollView
         ref={scrollRef}
         scrollEnabled={!dragging}
@@ -455,9 +457,34 @@ export function TileGrid({
           </ThemedText>
         </View>
       ) : null}
+    </Frame>
+  );
+}
+
+type FrameProps = { zoom: SharedValue<number>; zoomX: SharedValue<number>; zoomY: SharedValue<number>; onLayout: (e: LayoutChangeEvent) => void; children: ReactNode };
+
+/** The grid's root view; with `FOLDER_ZOOM` on it also zooms and fades about the tapped folder. */
+function ZoomFrame({ zoom, zoomX, zoomY, onLayout, children }: FrameProps) {
+  const zoomStyle = useAnimatedStyle(() => {
+    const z = zoom.get();
+    return { opacity: 1 - z, transform: [{ scale: 1 + z * 1.6 }], transformOrigin: [zoomX.get(), zoomY.get(), 0] };
+  });
+  return (
+    <Animated.View style={[styles.fill, zoomStyle]} onLayout={onLayout}>
+      {children}
     </Animated.View>
   );
 }
+
+function PlainFrame({ onLayout, children }: FrameProps) {
+  return (
+    <View style={styles.fill} onLayout={onLayout}>
+      {children}
+    </View>
+  );
+}
+
+const Frame = FOLDER_ZOOM ? ZoomFrame : PlainFrame;
 
 type GridGestureArgs = {
   draggable: boolean;
