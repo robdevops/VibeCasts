@@ -309,6 +309,8 @@ export function TileGrid({
       <ScrollView
         ref={scrollRef}
         scrollEnabled={!dragging}
+        // Android detaches off-screen children and can fail to bring the always-mounted first/last rows back (they stayed blank).
+        removeClippedSubviews={false}
         scrollEventThrottle={16}
         onScroll={(e) => {
           scrollNow.current = e.nativeEvent.contentOffset.y;
