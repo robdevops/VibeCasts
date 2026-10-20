@@ -1,7 +1,7 @@
 import Slider from '@react-native-community/slider';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Linking, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
+import { LayoutAnimation, Linking, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { Episode, Podcast } from '@/api/types';
@@ -68,12 +68,12 @@ export default function EpisodeScreen() {
   }, [params.podcastId, params.episodeId, subscribed, known, full, cached, current]);
 
   const isCurrent = !!viewed && current?.episode.id === viewed.episode.id && current.podcast.id === viewed.podcast.id;
-  const [tab, setTab] = useState<Tab>(isCurrent ? 'playing' : 'details');
+  const [tab, setTab] = useState<Tab>('playing');
   const [sheet, setSheet] = useState<Sheet>(null);
   const [scrub, setScrub] = useState<number | null>(null);
   const [playlistOpen, setPlaylistOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
-  const tabList: Tab[] = isCurrent ? ['playing', 'details', 'bookmarks'] : ['details', 'bookmarks'];
+  const tabList: Tab[] = ['playing', 'details', 'bookmarks'];
 
   // Tick once a second so the sleep-timer countdown stays fresh while the sheet is open.
   useEffect(() => {
@@ -97,13 +97,16 @@ export default function EpisodeScreen() {
 
   const { podcast, episode } = viewed;
   const duration = isCurrent && durationSec > 0 ? durationSec : episode.durationSec;
-  const position = isCurrent ? (scrub ?? positionSec) : 0;
+  // Not loaded yet: show where you left off (read-only) until you press play.
+  const position = isCurrent ? (scrub ?? positionSec) : state.played ? 0 : state.progressMs / 1000;
   const epBookmarks = bookmarksForEpisode(bookmarks, podcast.id, episode.id);
   const lib = useLibrary.getState();
 
   const playPause = () => {
     if (isCurrent) usePlayer.getState().toggle();
     else {
+      // The preview (small art + show notes) eases into the full player; the controls stay put.
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       usePlayer.getState().play(episode, podcast);
       setTab('playing');
     }
@@ -171,12 +174,36 @@ export default function EpisodeScreen() {
       <Header tab={tab} tabs={tabList} onTab={setTab} onClose={close} onQueue={openQueue} />
 
       <SwipeTabs tabs={tabList} tab={tab} onTab={setTab}>
-      {tab === 'playing' && isCurrent ? (
+      {tab === 'playing' ? (
         <View style={styles.body}>
-          <View style={styles.artWrap}>
-            <Artwork uri={episode.artwork ?? podcast.artwork} title={podcast.title} radius={18} style={styles.art} />
-          </View>
-          <View style={styles.titles}>
+          {!isCurrent ? (
+            <View style={styles.previewTop}>
+              <View style={styles.previewHead}>
+                <Artwork uri={episode.artwork ?? podcast.artwork} title={podcast.title} size={88} radius={14} />
+                <View style={{ flex: 1, gap: 4 }}>
+                  <ThemedText type="small" style={{ color: MUTED }}>
+                    {[episodeDateLabel(episode.published), durationLabel(episode.durationSec)].filter(Boolean).join(' · ')}
+                  </ThemedText>
+                  <ThemedText type="smallBold" style={styles.detailTitle} numberOfLines={3} accessibilityRole="header">
+                    {episode.title}
+                  </ThemedText>
+                  <Pressable accessibilityRole="link" onPress={() => goToPodcast(podcast.id)}>
+                    <ThemedText type="small" style={{ color: ACCENT }} numberOfLines={1}>
+                      {podcast.title}
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              </View>
+              <ScrollView style={styles.notesPanel} contentContainerStyle={styles.notesContent} accessibilityLabel="Show notes">
+                <ThemedText style={styles.notes}>{stripHtml(episode.description) || 'No show notes for this episode.'}</ThemedText>
+              </ScrollView>
+            </View>
+          ) : (
+            <>
+              <View style={styles.artWrap}>
+                <Artwork uri={episode.artwork ?? podcast.artwork} title={podcast.title} radius={18} style={styles.art} />
+              </View>
+              <View style={styles.titles}>
             <ThemedText type="subtitle" style={styles.title} numberOfLines={3} accessibilityRole="header">
               {episode.title}
             </ThemedText>
@@ -186,11 +213,14 @@ export default function EpisodeScreen() {
               </ThemedText>
             </Pressable>
           </View>
+            </>
+          )}
 
           <SwipeIgnore style={styles.scrubWrap}>
             <Slider
               accessibilityLabel="Seek"
               style={styles.slider}
+              disabled={!isCurrent}
               minimumValue={0}
               maximumValue={Math.max(duration, 1)}
               value={position}
@@ -210,13 +240,13 @@ export default function EpisodeScreen() {
           </SwipeIgnore>
 
           <View style={styles.controls}>
-            <Pressable accessibilityRole="button" accessibilityLabel={`Skip back ${skipBack} seconds`} onPress={() => usePlayer.getState().skipBack()} hitSlop={10}>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Skip back ${skipBack} seconds`} disabled={!isCurrent} onPress={() => usePlayer.getState().skipBack()} hitSlop={10} style={!isCurrent ? styles.dim : undefined}>
               <SkipIcon direction="back" seconds={skipBack} size={56} color="#fff" />
             </Pressable>
             <Pressable accessibilityRole="button" accessibilityLabel={playing ? 'Pause' : 'Play'} onPress={playPause} style={styles.bigPlay}>
               <Icon name={playing ? 'pause' : 'play-arrow'} size={56} color={BG} />
             </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel={`Skip forward ${skipForward} seconds`} onPress={() => usePlayer.getState().skipForward()} hitSlop={10}>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Skip forward ${skipForward} seconds`} disabled={!isCurrent} onPress={() => usePlayer.getState().skipForward()} hitSlop={10} style={!isCurrent ? styles.dim : undefined}>
               <SkipIcon direction="forward" seconds={skipForward} size={56} color="#fff" />
             </Pressable>
           </View>
@@ -371,6 +401,11 @@ const styles = StyleSheet.create({
   detailHead: { flexDirection: 'row', gap: 14, alignItems: 'center' },
   detailTitle: { color: '#fff', fontSize: 17, lineHeight: 23 },
   playCta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#fff', borderRadius: 26, paddingVertical: 12 },
+  dim: { opacity: 0.35 },
+  previewTop: { flex: 1, gap: 12, paddingTop: 8 },
+  previewHead: { flexDirection: 'row', gap: 14, alignItems: 'center' },
+  notesPanel: { flex: 1, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.06)' },
+  notesContent: { padding: 14 },
   notes: { color: 'rgba(255,255,255,0.85)', lineHeight: 24 },
   empty: { color: MUTED, textAlign: 'center', padding: 32 },
   bookmark: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(255,255,255,0.15)' },
