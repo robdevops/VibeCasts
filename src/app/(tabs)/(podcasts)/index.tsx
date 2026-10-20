@@ -16,6 +16,7 @@ import { useLibraryView } from '@/hooks/use-library-view';
 import { useTheme } from '@/hooks/use-theme';
 import { displayOrder } from '@/lib/display-order';
 import { parseKey } from '@/lib/layout';
+import { ensureThumbs } from '@/artwork/thumbs';
 import { prefetchTileArtwork } from '@/lib/prefetch-artwork';
 import { searchPodcasts } from '@/lib/search';
 import { SORT_LABELS, sortTiles, type PodcastSort, type SortableTile } from '@/lib/podcast-sort';
@@ -170,7 +171,8 @@ export default function PodcastsScreen() {
     const urls = priorityRef.current.map((id) => subs[id]?.podcast.artwork ?? '');
     // Every show at the smallest size first (tiny, so each tile has something to show), then sharp ones in display order.
     const shouldContinue = () => useFeeds.getState().looking;
-    void prefetchTileArtwork(urls, { low: true, shouldContinue }).then(() => prefetchTileArtwork(urls, { shouldContinue }));
+    void prefetchTileArtwork(urls, { low: true, shouldContinue }).then(() => prefetchTileArtwork(urls, { shouldContinue }))
+      .then(() => ensureThumbs(urls, { shouldContinue }));
   }, [libraryReady, looking, podcastIds]);
 
   const setSort = (s: PodcastSort) => {
