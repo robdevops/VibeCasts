@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import type { Podcast } from '@/api/types';
 import { kv } from '@/db/kv';
 import type { KV } from '@/db/storage';
+import { createWriter } from '@/db/writer';
 import { emptyEpisodeState, episodeKey, type EpisodeState } from '@/lib/episode-state';
 import { tileKey, type TileRef } from '@/lib/layout';
 import { normalizeFeedUrl, type OpmlFeed } from '@/lib/opml';
@@ -50,6 +51,11 @@ export type LibraryData = {
 
 type Actions = {
   hydrated: boolean;
+  /**
+   * Bumped only when an episode's played/archived state changes (what unplayed counts depend on),
+   * not on every progress save, so views that only need counts can skip those updates.
+   */
+  countsVersion: number;
   hydrate(): Promise<void>;
   subscribe(p: Podcast): void;
   /** Subscribe to many feeds from an OPML file, creating folders for named groups. */
@@ -98,6 +104,7 @@ export function createLibraryStore(storage: KV = kv) {
   const store = create<LibraryData & Actions>()((set, get) => ({
     ...initial,
     hydrated: false,
+    countsVersion: 0,
 
     async hydrate() {
       try {
@@ -106,7 +113,7 @@ export function createLibraryStore(storage: KV = kv) {
       } catch {
         // Corrupt or unavailable storage: start empty rather than crash.
       }
-      set({ hydrated: true });
+      set((s) => ({ hydrated: true, countsVersion: s.countsVersion + 1 }));
     },
 
     subscribe(p) {
@@ -268,19 +275,24 @@ export function createLibraryStore(storage: KV = kv) {
     patchEpisode(key, patch) {
       set((s) => {
         const prev = s.episodes[key] ?? emptyEpisodeState;
-        return { episodes: { ...s.episodes, [key]: { ...prev, ...withPlayedAt(prev, patch) } } };
+        const next = { ...prev, ...withPlayedAt(prev, patch) };
+        const countsChanged = next.played !== prev.played || next.archived !== prev.archived;
+        return { episodes: { ...s.episodes, [key]: next }, ...(countsChanged ? { countsVersion: s.countsVersion + 1 } : null) };
       });
     },
 
     patchEpisodes(podcastId, ids, patch) {
       set((s) => {
         const episodes = { ...s.episodes };
+        let countsChanged = false;
         for (const id of ids) {
           const key = episodeKey(podcastId, id);
           const prev = episodes[key] ?? emptyEpisodeState;
-          episodes[key] = { ...prev, ...withPlayedAt(prev, patch) };
+          const next = { ...prev, ...withPlayedAt(prev, patch) };
+          if (next.played !== prev.played || next.archived !== prev.archived) countsChanged = true;
+          episodes[key] = next;
         }
-        return { episodes };
+        return { episodes, ...(countsChanged ? { countsVersion: s.countsVersion + 1 } : null) };
       });
     },
 
@@ -297,23 +309,35 @@ export function createLibraryStore(storage: KV = kv) {
     setSort: (sort) => set({ sort }),
   }));
 
-  // Persist data (not actions) after hydration, coalescing bursts of writes.
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  store.subscribe((s) => {
+  // Persist data (not actions) after hydration, coalescing bursts of writes. Playback saves progress
+  // every few seconds, which touches only the episode states: those can wait longer than structural
+  // changes (the app flushes everything when it goes to the background).
+  const writer = createWriter(storage, STORAGE_KEY);
+  store.subscribe((s, prev) => {
     if (!s.hydrated) return;
-    clearTimeout(timer);
-    timer = setTimeout(() => {
-      const data: LibraryData = {
-        subscriptions: s.subscriptions,
-        folders: s.folders,
-        homeOrder: s.homeOrder,
-        folderOrder: s.folderOrder,
-        episodes: s.episodes,
-        layout: s.layout,
-        sort: s.sort,
-      };
-      storage.setItem(STORAGE_KEY, JSON.stringify(data)).catch(() => {});
-    }, 150);
+    const progressOnly =
+      s.episodes !== prev.episodes &&
+      s.subscriptions === prev.subscriptions &&
+      s.folders === prev.folders &&
+      s.homeOrder === prev.homeOrder &&
+      s.folderOrder === prev.folderOrder &&
+      s.layout === prev.layout &&
+      s.sort === prev.sort;
+    writer.schedule(
+      () => {
+        const data: LibraryData = {
+          subscriptions: s.subscriptions,
+          folders: s.folders,
+          homeOrder: s.homeOrder,
+          folderOrder: s.folderOrder,
+          episodes: s.episodes,
+          layout: s.layout,
+          sort: s.sort,
+        };
+        return JSON.stringify(data);
+      },
+      progressOnly ? 2500 : 150,
+    );
   });
 
   return store;

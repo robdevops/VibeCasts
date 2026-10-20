@@ -1,6 +1,8 @@
 import { sampleFeed } from '@/api/__fixtures__/feed.xml';
 import { createMemoryKV } from '@/db/storage';
 
+import { FeedNotModified } from '@/api/feed-fetch';
+
 import { createFeedStore } from './feeds';
 
 jest.mock('@/db/kv', () => ({ kv: {} }));
@@ -55,7 +57,7 @@ it('remembers discovered podcasts and persists them', async () => {
   const a = createFeedStore(storage, jest.fn());
   await a.getState().hydrate();
   a.getState().remember(pod);
-  jest.advanceTimersByTime(1000);
+  jest.advanceTimersByTime(4000);
   jest.useRealTimers();
   await Promise.resolve();
   const b = createFeedStore(storage, jest.fn());
@@ -70,7 +72,7 @@ it('persists a slim cache without show notes', async () => {
   await s.getState().hydrate();
   await s.getState().refresh(pod);
   expect(s.getState().feeds['1'].episodes.some((e) => e.description)).toBe(true);
-  jest.advanceTimersByTime(1000);
+  jest.advanceTimersByTime(4000);
   jest.useRealTimers();
   await Promise.resolve();
   const saved = JSON.parse((await storage.getItem('feeds.v1')) ?? '{}');
@@ -95,4 +97,38 @@ it('backfills imported shows 3 at a time and clears needsMeta through onMeta', a
   expect(peak).toBe(3);
   expect(onMeta).toHaveBeenCalledTimes(7);
   expect(s.getState().backfillProgress).toBeNull();
+});
+
+describe('conditional refresh (unchanged feeds cost almost nothing)', () => {
+  it('sends the saved validators on bulk refreshes and keeps the cache on 304', async () => {
+    const calls: (string | undefined)[] = [];
+    const fetchText = jest.fn(async (_url: string, v?: { etag?: string }) => {
+      calls.push(v?.etag);
+      if (v?.etag === '"v1"') throw new FeedNotModified();
+      return { text: sampleFeed, validators: { etag: '"v1"', lastModified: 'Tue, 01 Jan 2030 00:00:00 GMT' } };
+    });
+    const s = createFeedStore(createMemoryKV(), fetchText);
+    await s.getState().refresh(pod); // first fetch: full, remembers the validators
+    expect(s.getState().feeds['1'].validators?.etag).toBe('"v1"');
+    const firstFetch = s.getState().feeds['1'].fetchedAt;
+
+    await new Promise((r) => setTimeout(r, 5));
+    await s.getState().refreshAll([pod]); // bulk: conditional, answered 304
+    expect(calls).toEqual([undefined, '"v1"']);
+    expect(s.getState().feeds['1'].total).toBe(3); // cache kept
+    expect(s.getState().feeds['1'].episodes).toHaveLength(3);
+    expect(s.getState().feeds['1'].fetchedAt).toBeGreaterThan(firstFetch); // counts as fresh
+  });
+
+  it('a normal refresh (opening the page, pull to refresh) always fetches the whole feed', async () => {
+    const calls: (string | undefined)[] = [];
+    const fetchText = jest.fn(async (_url: string, v?: { etag?: string }) => {
+      calls.push(v?.etag);
+      return { text: sampleFeed, validators: { etag: '"v1"' } };
+    });
+    const s = createFeedStore(createMemoryKV(), fetchText);
+    await s.getState().refresh(pod);
+    await s.getState().refresh(pod);
+    expect(calls).toEqual([undefined, undefined]);
+  });
 });
