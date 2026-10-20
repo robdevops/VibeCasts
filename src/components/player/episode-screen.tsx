@@ -68,6 +68,15 @@ export default function EpisodeScreen() {
   }, [params.podcastId, params.episodeId, subscribed, known, full, cached, current]);
 
   const isCurrent = !!viewed && current?.episode.id === viewed.episode.id && current.podcast.id === viewed.podcast.id;
+  const feedLoading = useFeeds((s) => (params.podcastId ? !!s.loading[params.podcastId] : false));
+  // The saved feed cache leaves out show notes: fetch the feed when we are about to show an episode without them.
+  const needsNotes = !!viewed && !viewed.episode.description && !full;
+  // Opened from history/a notification for an episode older than the cache: load the whole feed to find it.
+  const missingEpisode = !viewed && !!params.episodeId && !full;
+  const feedPodcast = viewed?.podcast ?? subscribed ?? known;
+  useEffect(() => {
+    if ((needsNotes || missingEpisode) && feedPodcast) void useFeeds.getState().refresh(feedPodcast);
+  }, [needsNotes, missingEpisode, feedPodcast]);
   const [tab, setTab] = useState<Tab>('playing');
   const [sheet, setSheet] = useState<Sheet>(null);
   const [scrub, setScrub] = useState<number | null>(null);
@@ -195,7 +204,7 @@ export default function EpisodeScreen() {
                 </View>
               </View>
               <ScrollView style={styles.notesPanel} contentContainerStyle={styles.notesContent} accessibilityLabel="Show notes">
-                <ThemedText style={styles.notes}>{stripHtml(episode.description) || 'No show notes for this episode.'}</ThemedText>
+                <ThemedText style={styles.notes}>{stripHtml(episode.description) || (feedLoading || needsNotes ? 'Loading show notes…' : 'No show notes for this episode.')}</ThemedText>
               </ScrollView>
             </View>
           ) : (
@@ -284,7 +293,7 @@ export default function EpisodeScreen() {
                   </ThemedText>
                 </Pressable>
               ) : null}
-              <ThemedText style={styles.notes}>{stripHtml(episode.description) || 'No show notes for this episode.'}</ThemedText>
+              <ThemedText style={styles.notes}>{stripHtml(episode.description) || (feedLoading || needsNotes ? 'Loading show notes…' : 'No show notes for this episode.')}</ThemedText>
             </>
           ) : (
             <>

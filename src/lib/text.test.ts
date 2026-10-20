@@ -9,3 +9,8 @@ it('renders list items as bullets', () => {
 it('decodes numeric entities and collapses blank lines', () => {
   expect(stripHtml('It&#8217;s<br><br><br><br>fine')).toBe('It’s\n\nfine');
 });
+
+it('treats missing show notes as empty instead of crashing', () => {
+  expect(stripHtml(undefined)).toBe('');
+  expect(stripHtml(null)).toBe('');
+});
