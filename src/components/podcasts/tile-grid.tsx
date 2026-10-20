@@ -19,11 +19,8 @@ import { useTheme } from '@/hooks/use-theme';
 import { contentHeight, metricsFor, mountedRange, nearCenter, slotAt, slotRect, tileAt, visibleRange, type GridMetrics } from '@/lib/grid';
 import { reorder } from '@/lib/layout';
 
-/**
- * Opening a folder zooms the grid towards you (see `ZoomFrame`). Switched off for now while checking how scrolling
- * feels without it: flip to true to bring it back (the folder page still fades in).
- */
-const FOLDER_ZOOM = false;
+/** Opening a folder: that folder's tile (only) expands towards you and fades while the folder page fades in. */
+const FOLDER_ZOOM = true;
 
 export type GridItem = { key: string; kind: 'podcast' | 'folder' };
 
@@ -104,9 +101,8 @@ export function TileGrid({
   const ghostY = useSharedValue(0);
   // Opening a folder zooms the grid towards you (about the tapped tile) while it fades out; coming back reverses it.
   const zoom = useSharedValue(0);
-  const zoomX = useSharedValue(0);
-  const zoomY = useSharedValue(0);
-  const zoomed = useRef(false);
+  const [zoomKey, setZoomKey] = useState<string | null>(null); // the folder being opened (its tile is drawn as a zooming copy)
+  const zoomTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const focused = useIsFocused();
   const scrollNow = useRef(0);
   const contentH = useRef(0);
@@ -345,10 +341,9 @@ export function TileGrid({
     const at = tileAt(x, y, m, keys.length);
     const item = at >= 0 ? byKey.get(keys[at]) : undefined;
     if (FOLDER_ZOOM && item?.kind === 'folder') {
-      const rect = slotRect(at, m);
-      zoomX.set(rect.left + m.tile / 2);
-      zoomY.set(rect.top + m.tile / 2 - scrollNow.current);
-      zoomed.current = true;
+      if (zoomTimer.current) clearTimeout(zoomTimer.current);
+      zoom.set(0);
+      setZoomKey(item.key);
       zoom.set(withTiming(1, { duration: 300 }));
     }
     if (item) onPress(item);
@@ -390,17 +385,26 @@ export function TileGrid({
       transform: [{ scale: 1.07 }],
     };
   });
+  // Back from the folder: the tile zooms back into place, then the copy goes away.
   useEffect(() => {
-    if (FOLDER_ZOOM && focused && zoomed.current) {
-      zoomed.current = false;
-      zoom.set(withTiming(0, { duration: 280 }));
-    }
-  }, [focused, zoom]);
+    if (!FOLDER_ZOOM || !focused || zoomKey === null) return;
+    zoom.set(withTiming(0, { duration: 280 }));
+    zoomTimer.current = setTimeout(() => setZoomKey(null), 300);
+    return () => {
+      if (zoomTimer.current) clearTimeout(zoomTimer.current);
+    };
+  }, [focused, zoomKey, zoom]);
+  const zoomStyle = useAnimatedStyle(() => {
+    const z = zoom.get();
+    return { opacity: 1 - z, transform: [{ scale: 1 + z * 4 }] };
+  });
+  const zoomItem = zoomKey ? byKey.get(zoomKey) : undefined;
+  const zoomIndex = zoomKey ? (slotOf.get(zoomKey) ?? -1) : -1;
   const ghostItem = ghostKey ? byKey.get(ghostKey) : undefined;
   const dragging = activeKey !== null;
 
   return (
-    <Frame zoom={zoom} zoomX={zoomX} zoomY={zoomY} onLayout={onLayout}>
+    <View style={styles.fill} onLayout={onLayout}>
       <ScrollView
         ref={scrollRef}
         scrollEnabled={!dragging}
@@ -418,20 +422,27 @@ export function TileGrid({
               {items.map((item, natural) => {
                 const key = item.key;
                 const index = slotOf.get(key) ?? natural;
-                if ((index < win.start || index >= win.end) && key !== ghostKey) return null;
+                if ((index < win.start || index >= win.end) && key !== ghostKey && key !== zoomKey) return null;
                 return (
                   <Tile
                     key={key}
                     item={item}
                     index={index}
                     m={m}
-                    hidden={key === ghostKey}
+                    hidden={key === ghostKey || key === zoomKey}
                     highlighted={key === hoverFolder}
                     renderItem={stable.renderItem}
                     version={itemVersion ? itemVersion(item) : 0}
                   />
                 );
               })}
+              {zoomItem && zoomIndex >= 0 ? (
+                <Animated.View
+                  pointerEvents="none"
+                  style={[styles.cell, { left: slotRect(zoomIndex, m).left, top: slotRect(zoomIndex, m).top, width: m.tile, height: m.tile, zIndex: 30 }, zoomStyle]}>
+                  {renderItem(zoomItem, m.tile)}
+                </Animated.View>
+              ) : null}
               {ghostItem ? (
                 <Animated.View pointerEvents="none" style={[styles.cell, { width: m.tile, height: m.tile, zIndex: 20 }, ghostStyle]}>
                   {renderItem(ghostItem, m.tile)}
@@ -457,34 +468,9 @@ export function TileGrid({
           </ThemedText>
         </View>
       ) : null}
-    </Frame>
-  );
-}
-
-type FrameProps = { zoom: SharedValue<number>; zoomX: SharedValue<number>; zoomY: SharedValue<number>; onLayout: (e: LayoutChangeEvent) => void; children: ReactNode };
-
-/** The grid's root view; with `FOLDER_ZOOM` on it also zooms and fades about the tapped folder. */
-function ZoomFrame({ zoom, zoomX, zoomY, onLayout, children }: FrameProps) {
-  const zoomStyle = useAnimatedStyle(() => {
-    const z = zoom.get();
-    return { opacity: 1 - z, transform: [{ scale: 1 + z * 1.6 }], transformOrigin: [zoomX.get(), zoomY.get(), 0] };
-  });
-  return (
-    <Animated.View style={[styles.fill, zoomStyle]} onLayout={onLayout}>
-      {children}
-    </Animated.View>
-  );
-}
-
-function PlainFrame({ onLayout, children }: FrameProps) {
-  return (
-    <View style={styles.fill} onLayout={onLayout}>
-      {children}
     </View>
   );
 }
-
-const Frame = FOLDER_ZOOM ? ZoomFrame : PlainFrame;
 
 type GridGestureArgs = {
   draggable: boolean;
