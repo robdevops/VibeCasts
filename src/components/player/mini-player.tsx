@@ -1,5 +1,5 @@
+import { useRef } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { GestureDetector } from 'react-native-gesture-handler';
 
 import { ThemedText } from '@/components/themed-text';
 import { Artwork } from '@/components/ui/artwork';
@@ -8,16 +8,16 @@ import { useTheme } from '@/hooks/use-theme';
 import { useSettings } from '@/store/settings';
 import { usePlayer } from '@/store/player';
 
-import { openPlayerSheet, usePlayerSheetDrag } from './sheet-state';
+import { openPlayerSheet, setMiniLayout } from './sheet-state';
 import { SkipIcon } from './skip-icon';
 
 const openEpisode = openPlayerSheet;
 
 /**
- * Persistent playback bar above the tab bar. Tap it to open the player, or drag it up: the player
- * follows your finger and opens if you pull it past the halfway point, otherwise it springs back.
+ * The mini player as it looks. The visible one lives in the player sheet (so it can slide up and
+ * become the full player); `MiniPlayer` below only reserves its space in the layout.
  */
-export function MiniPlayer() {
+export function MiniPlayerView() {
   const theme = useTheme();
   const current = usePlayer((s) => s.current);
   const playing = usePlayer((s) => s.playing);
@@ -26,14 +26,11 @@ export function MiniPlayer() {
   const skipBack = useSettings((s) => s.skipBackSec);
   const skipForward = useSettings((s) => s.skipForwardSec);
 
-  const drag = usePlayerSheetDrag();
-
   if (!current) return null;
   const { episode, podcast } = current;
 
   return (
-    <GestureDetector gesture={drag}>
-      <View style={[styles.card, { backgroundColor: theme.accentSoft }]}>
+    <View style={[styles.card, { backgroundColor: theme.accentSoft }]}>
         <View style={styles.row}>
           <Pressable
             accessibilityRole="button"
@@ -70,13 +67,31 @@ export function MiniPlayer() {
           <View style={[styles.fill, { backgroundColor: theme.accent, width: `${fraction * 100}%` }]} />
         </View>
       </View>
-    </GestureDetector>
+  );
+}
+
+/** Invisible stand-in in the tab bar: keeps the layout, and tells the sheet where the mini player sits. */
+export function MiniPlayer() {
+  const hasCurrent = usePlayer((s) => !!s.current);
+  const ref = useRef<View>(null);
+  if (!hasCurrent) return null;
+  return (
+    <View
+      ref={ref}
+      pointerEvents="none"
+      importantForAccessibility="no-hide-descendants"
+      accessibilityElementsHidden
+      style={styles.placeholder}
+      onLayout={() => ref.current?.measureInWindow((_x, y, _w, h) => setMiniLayout(y, h))}>
+      <MiniPlayerView />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   // Square and full width, so the progress line is visible from its very start to its end.
   card: { overflow: 'hidden' },
+  placeholder: { opacity: 0 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 10, paddingTop: 8, paddingBottom: 8 },
   art: { borderRadius: 8 },
   spacer: { flex: 1, minWidth: 0 },

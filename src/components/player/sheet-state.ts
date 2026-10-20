@@ -8,6 +8,18 @@ import { create } from 'zustand';
 /** 0 = the player is closed (only the mini player shows), 1 = fully open. Follows the finger while dragging. */
 export const sheetProgress = makeMutable(0);
 
+/**
+ * Where the mini player sits (window y of its top edge, and its height). The sheet is the mini
+ * player: at progress 0 its top edge is here, and it travels up to the top of the screen. 0 until
+ * measured.
+ */
+export const miniTop = makeMutable(0);
+export const useMiniHeight = create<{ height: number }>(() => ({ height: 0 }));
+export const setMiniLayout = (top: number, height: number) => {
+  miniTop.set(top);
+  useMiniHeight.setState({ height });
+};
+
 /** Is the player settled open? (For the Android back button and touch handling.) */
 export const usePlayerSheet = create<{ open: boolean }>(() => ({ open: false }));
 
@@ -46,7 +58,9 @@ export function usePlayerSheetDrag() {
           startProgress.set(sheetProgress.get());
         })
         .onUpdate((e) => {
-          sheetProgress.set(Math.min(1, Math.max(0, startProgress.get() - e.translationY / height)));
+          // The card follows the finger one for one: it travels from the mini player's spot to the top.
+          const travel = Math.max(1, miniTop.get() || height);
+          sheetProgress.set(Math.min(1, Math.max(0, startProgress.get() - e.translationY / travel)));
         })
         .onEnd((e) => {
           const p = sheetProgress.get();
