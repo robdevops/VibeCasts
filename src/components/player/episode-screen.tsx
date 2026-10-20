@@ -71,10 +71,12 @@ export function EpisodeView({ podcastId, episodeId, onClose, sheet: isSheet = fa
   const sleep = usePlayer((s) => s.sleep);
   const skipBack = useSettings((s) => s.skipBackSec);
   const skipForward = useSettings((s) => s.skipForwardSec);
-  const full = useFeeds((s) => (params.podcastId ? s.full[params.podcastId] : undefined));
-  const cached = useFeeds((s) => (params.podcastId ? s.feeds[params.podcastId] : undefined));
-  const known = useFeeds((s) => (params.podcastId ? s.known[params.podcastId] : undefined));
-  const subscribed = useLibrary((s) => (params.podcastId ? s.subscriptions[params.podcastId]?.podcast : undefined));
+  // The show whose feed to look in: the one named by the route, or (the player sheet) the one that is playing.
+  const feedId = params.podcastId ?? current?.podcast.id;
+  const full = useFeeds((s) => (feedId ? s.full[feedId] : undefined));
+  const cached = useFeeds((s) => (feedId ? s.feeds[feedId] : undefined));
+  const known = useFeeds((s) => (feedId ? s.known[feedId] : undefined));
+  const subscribed = useLibrary((s) => (feedId ? s.subscriptions[feedId]?.podcast : undefined));
   const bookmarks = useBookmarks((s) => s.items);
 
   // Either the episode the user tapped (to look at it), or whatever is loaded in the player.
@@ -86,19 +88,37 @@ export function EpisodeView({ podcastId, episodeId, onClose, sheet: isSheet = fa
         (current?.episode.id === params.episodeId ? current.episode : undefined);
       return podcast && episode ? { podcast, episode } : null;
     }
+    // The playing episode is stored without show notes (so a restored or library-started one has none): pick them up
+    // from the feed once it has loaded.
+    if (current && !current.episode.description) {
+      const withNotes = full?.episodes.find((e) => e.id === current.episode.id);
+      if (withNotes?.description) return { podcast: current.podcast, episode: { ...current.episode, description: withNotes.description } };
+    }
     return current;
   }, [params.podcastId, params.episodeId, subscribed, known, full, cached, current]);
 
   const isCurrent = !!viewed && current?.episode.id === viewed.episode.id && current.podcast.id === viewed.podcast.id;
-  const feedLoading = useFeeds((s) => (params.podcastId ? !!s.loading[params.podcastId] : false));
+  const feedLoading = useFeeds((s) => (feedId ? !!s.loading[feedId] : false));
   // The saved feed cache leaves out show notes: fetch the feed when we are about to show an episode without them.
   const needsNotes = !!viewed && !viewed.episode.description && !full;
   // Opened from history/a notification for an episode older than the cache: load the whole feed to find it.
   const missingEpisode = !viewed && !!params.episodeId && !full;
   const feedPodcast = viewed?.podcast ?? subscribed ?? known;
+  // Set when a load finished without the feed arriving (offline...), so the notes say so instead of "Loading" forever.
+  const [notesFailedFor, setNotesFailedFor] = useState<string | null>(null);
+  const notesKey = viewed ? `${viewed.podcast.id}|${viewed.episode.id}` : (params.episodeId ?? '');
   useEffect(() => {
-    if ((needsNotes || missingEpisode) && feedPodcast) void useFeeds.getState().refresh(feedPodcast);
-  }, [needsNotes, missingEpisode, feedPodcast]);
+    // Wait for a load already in progress (another view's); once it ends this runs again if the notes still aren't here.
+    if (!(needsNotes || missingEpisode) || !feedPodcast || feedLoading || notesFailedFor === notesKey) return;
+    void useFeeds
+      .getState()
+      .refresh(feedPodcast)
+      .then(() => {
+        if (!useFeeds.getState().full[feedPodcast.id]) setNotesFailedFor(notesKey);
+      });
+  }, [needsNotes, missingEpisode, feedPodcast, feedLoading, notesFailedFor, notesKey]);
+  const notesFallback =
+    notesFailedFor === notesKey ? 'Couldn’t load show notes.' : feedLoading || needsNotes ? 'Loading show notes…' : 'No show notes for this episode.';
   const [tab, setTab] = useState<Tab>('playing');
   const [sheet, setSheet] = useState<Sheet>(null);
   const [scrub, setScrub] = useState<number | null>(null);
@@ -226,7 +246,7 @@ export function EpisodeView({ podcastId, episodeId, onClose, sheet: isSheet = fa
                 </View>
               </Draggable>
               <ScrollView style={styles.notesPanel} contentContainerStyle={styles.notesContent} accessibilityLabel="Show notes">
-                <ThemedText style={styles.notes}>{stripHtml(episode.description) || (feedLoading || needsNotes ? 'Loading show notes…' : 'No show notes for this episode.')}</ThemedText>
+                <ThemedText style={styles.notes}>{stripHtml(episode.description) || notesFallback}</ThemedText>
               </ScrollView>
             </View>
           ) : (
@@ -315,7 +335,7 @@ export function EpisodeView({ podcastId, episodeId, onClose, sheet: isSheet = fa
                   </ThemedText>
                 </Pressable>
               ) : null}
-              <ThemedText style={styles.notes}>{stripHtml(episode.description) || (feedLoading || needsNotes ? 'Loading show notes…' : 'No show notes for this episode.')}</ThemedText>
+              <ThemedText style={styles.notes}>{stripHtml(episode.description) || notesFallback}</ThemedText>
             </>
       </ScrollView>
   );
