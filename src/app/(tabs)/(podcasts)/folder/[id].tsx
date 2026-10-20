@@ -32,6 +32,9 @@ export default function FolderScreen() {
   const rootRef = useRef<View>(null);
   const frame = useRef({ x: 0, y: 0, w: 1 });
   const exit = useSharedValue(0);
+  // Once leaving has started the page ignores touches, so a second tap on Back (during the 500 ms close) can't send a
+  // second GO_BACK to a stack that has nothing left to go back to.
+  const [closing, setClosing] = useState(false);
   const originX = useSharedValue(0);
   const originY = useSharedValue(0);
   const endScale = useSharedValue(1);
@@ -39,6 +42,7 @@ export default function FolderScreen() {
   useEffect(() => {
     if (!FOLDER_ZOOM) return;
     const start = () => {
+      setClosing(true);
       const o = getZoomOrigin();
       if (!o || exit.get() > 0) return;
       originX.set(o.x - frame.current.x);
@@ -81,7 +85,7 @@ export default function FolderScreen() {
   }
 
   return (
-    <Animated.View ref={rootRef} onLayout={measure} style={[styles.fill, shrinkStyle]}>
+    <Animated.View ref={rootRef} onLayout={measure} pointerEvents={closing ? 'none' : 'auto'} style={[styles.fill, shrinkStyle]}>
     <ThemedView style={styles.fill}>
       <ScreenHeader
         title={folder.name}

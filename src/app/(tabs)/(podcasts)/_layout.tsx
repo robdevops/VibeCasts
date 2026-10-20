@@ -1,5 +1,8 @@
 import { Stack } from 'expo-router';
 
+// Opening straight onto a folder or show (a link, a restored session) still leaves the library underneath, so Back works.
+export const unstable_settings = { initialRouteName: 'index' };
+
 export default function StackLayout() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
