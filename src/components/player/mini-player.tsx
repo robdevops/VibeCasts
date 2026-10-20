@@ -84,7 +84,7 @@ const styles = StyleSheet.create({
   art: { borderRadius: 8 },
   spacer: { flex: 1, minWidth: 0 },
   play: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
-  track: { height: 1 },
-  trackBg: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, opacity: 0.18 },
-  fill: { height: 1 },
+  track: { height: 3 },
+  trackBg: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, opacity: 0.3 },
+  fill: { height: 3 },
 });
