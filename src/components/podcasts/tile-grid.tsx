@@ -13,6 +13,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 
+import { ELASTIC_SCROLL } from '@/constants/scroll';
 import { ThemedText } from '@/components/themed-text';
 import { Icon } from '@/components/ui/icon';
 import { HEADER_HEIGHT } from '@/components/ui/screen-header';
@@ -453,6 +454,7 @@ export function TileGrid({
     <View ref={rootRef} style={styles.fill} onLayout={onLayout}>
       <ScrollView
         ref={scrollRef}
+        {...ELASTIC_SCROLL}
         scrollEnabled={!dragging}
         scrollEventThrottle={16}
         onScroll={(e) => {

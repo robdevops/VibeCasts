@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
+import { ELASTIC_SCROLL } from '@/constants/scroll';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Icon, type IconName } from '@/components/ui/icon';
@@ -38,7 +39,7 @@ export default function ProfileScreen() {
   return (
     <ThemedView style={styles.fill}>
       <ScreenHeader title="Profile" large />
-      <ScrollView>
+      <ScrollView {...ELASTIC_SCROLL}>
         <View style={styles.summary}>
           <View style={[styles.avatar, { backgroundColor: theme.accentSoft }]}>
             <Icon name="headphones" size={36} color={theme.accent} />

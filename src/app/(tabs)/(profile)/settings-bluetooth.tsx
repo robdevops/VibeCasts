@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 
+import { ELASTIC_SCROLL } from '@/constants/scroll';
 import { ThemedView } from '@/components/themed-view';
 import { Note, PickerRow, SectionTitle, ToggleRow } from '@/components/settings/rows';
 import { MenuSheet, type MenuItem } from '@/components/ui/menu-sheet';
@@ -44,7 +45,7 @@ export default function BluetoothSettingsScreen() {
   return (
     <ThemedView style={styles.fill}>
       <ScreenHeader title="Bluetooth" back />
-      <ScrollView>
+      <ScrollView {...ELASTIC_SCROLL}>
         <SectionTitle>HEADSET BUTTONS</SectionTitle>
         {HEADSET_BUTTONS.map((b) => (
           <PickerRow key={b} label={HEADSET_BUTTON_LABELS[b]} hint={HEADSET_BUTTON_HINTS[b]} value={labelOf(b, actionOf(b))} onPress={() => setMenu(b)} />
