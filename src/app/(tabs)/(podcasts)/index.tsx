@@ -55,7 +55,14 @@ export default function PodcastsScreen() {
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
+    // The spinner goes as soon as any feed has come back; the rest keep loading (their badges update as they land).
+    const stop = useFeeds.subscribe((s, prev) => {
+      if (s.feeds === prev.feeds) return;
+      stop();
+      setRefreshing(false);
+    });
     await useFeeds.getState().refreshAll(podcasts);
+    stop();
     setRefreshing(false);
   }, [podcasts]);
 
