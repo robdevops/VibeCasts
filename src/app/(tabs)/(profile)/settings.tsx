@@ -25,7 +25,7 @@ export default function SettingsScreen() {
       <ScrollView>
         <NavRow label="Playback" hint="Skip lengths, resume, mobile data, sleep timer." href="/settings-playback" />
         <NavRow label="Downloads" hint="Auto archive, auto delete and automatic downloads." href="/settings-downloads" />
-        <NavRow label="Bluetooth and lock screen" hint="What the headset and lock screen buttons do." href="/settings-bluetooth" />
+        <NavRow label="Bluetooth" hint="What the headset and lock screen buttons do." href="/settings-bluetooth" />
         <LibrarySection />
         <ThemedText type="smallBold" themeColor="textSecondary" style={styles.section}>
           TROUBLESHOOTING
