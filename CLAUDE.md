@@ -42,7 +42,7 @@ Node 24 (`.nvmrc`), Xcode (iOS Simulator), Android Studio (AVD). `npx expo start
 ## OPML import/export
 - `src/lib/opml.ts` parses/builds OPML (pure, tested against a sanitised fixture). Settings > Library (`components/settings/library-section.tsx`) previews, imports (`library.importFeeds`, deduped by `normalizeFeedUrl`, so http == https and iTunes-id subscriptions match) and exports (`opml-io.ts`: document picker + share sheet, Blob download on web).
 - Imported shows are `needsMeta`; `feeds.backfill` fetches their feed 3 at a time and `mergePodcastMeta` fills in artwork/author/title (banner on the Podcasts screen).
-- The persisted feed cache is slim (newest 50 episodes, no show notes); the full feed lives in memory. `TileGrid` mounts only rows near the viewport (`visibleRange`).
+- The persisted feed cache is slim (newest 20 episodes, no show notes); the full feed lives in memory. `TileGrid` mounts only rows near the viewport (`visibleRange`).
 - Feeds given as http are tried over https first (`feedCandidates`); the build allows cleartext (`expo-build-properties`, iOS ATS) for feeds and audio that only offer http.
 
 ## Keeping your place, artwork, startup
