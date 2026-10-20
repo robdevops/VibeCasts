@@ -3,7 +3,7 @@
 Expo (SDK 57, to match the store build of Expo Go) + React Native + TypeScript + Expo Router app for experimenting with small app clones. Read `AGENTS.md` first: Expo APIs change every SDK, so check the versioned docs before touching them.
 
 ## Working with the user
-End every piece of work with a code block of the exact commands to run on the Mac to pick it up (e.g. `git pull`, `npm ci`, `npm run dev-client`, plus `npx eas-cli@latest build --profile development --platform android` only when native code or `app.json` changed). Say whether a rebuild is needed.
+End every piece of work with a code block of the exact commands to run on the Mac to pick it up (e.g. `git pull`, `npm ci`, `npm run dev-client`, plus `npx eas-cli@latest build --profile development --platform android` only when native code or `app.json` changed). Say whether a rebuild is needed in the text, not in the block: no comments inside the command block, only commands.
 
 ## Commands
 - `npm run web`: dev server for the web target on :8081 (`expo start --web`)
