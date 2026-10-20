@@ -355,9 +355,9 @@ export function TileGrid({
     }
     if (item) onPress(item);
   };
-  const latest = useRef({ pressAt, onDragStart, onDragMove, onDragEnd, renderItem });
+  const latest = useRef({ pressAt, onDragStart, onDragMove, onDragEnd });
   useEffect(() => {
-    latest.current = { pressAt, onDragStart, onDragMove, onDragEnd, renderItem };
+    latest.current = { pressAt, onDragStart, onDragMove, onDragEnd };
   });
   const stable = useMemo(
     () => ({
@@ -365,7 +365,6 @@ export function TileGrid({
       onDragStart: (x: number, y: number) => latest.current.onDragStart(x, y),
       onDragMove: (tx: number, ty: number, absY: number) => latest.current.onDragMove(tx, ty, absY),
       onDragEnd: () => latest.current.onDragEnd(),
-      renderItem: (item: GridItem, size: number) => latest.current.renderItem(item, size),
     }),
     [],
   );
@@ -457,7 +456,7 @@ export function TileGrid({
                     m={m}
                     hidden={key === ghostKey || key === zoomKey}
                     highlighted={key === hoverFolder}
-                    renderItem={stable.renderItem}
+                    renderItem={renderItem}
                     version={itemVersion ? itemVersion(item) : 0}
                   />
                 );
@@ -567,8 +566,11 @@ const sameTile = (a: TileProps, b: TileProps) =>
   a.m.pad === b.m.pad &&
   a.hidden === b.hidden &&
   a.highlighted === b.highlighted &&
-  a.version === b.version &&
-  a.renderItem === b.renderItem;
+  // `renderItem` is deliberately not compared: it is new on every render, and a tile only re-renders when its `version`
+  // (what it shows) changes, in which case it must draw with the renderItem of THIS render. Reading it through a ref that
+  // is updated in an effect would hand the tile the previous render's data, so a recoloured folder or a new member
+  // would not show until the next change.
+  a.version === b.version;
 
 /** A tile is just a positioned view (no gesture, no animated values): cheap to mount. It glides when its slot changes. */
 const Tile = memo(function TileBase({ item, index, m, hidden, highlighted, renderItem }: TileProps) {
