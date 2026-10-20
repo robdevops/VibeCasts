@@ -43,7 +43,7 @@ export default function BluetoothSettingsScreen() {
 
   return (
     <ThemedView style={styles.fill}>
-      <ScreenHeader title="Bluetooth and lock screen" back />
+      <ScreenHeader title="Bluetooth" back />
       <ScrollView>
         <SectionTitle>HEADSET BUTTONS</SectionTitle>
         {HEADSET_BUTTONS.map((b) => (
