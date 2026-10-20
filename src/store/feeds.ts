@@ -9,7 +9,7 @@ import type { KV } from '@/db/storage';
 import { createWriter } from '@/db/writer';
 
 /** Newest episodes kept per show in the persisted cache. */
-const MAX_CACHED = 50;
+const MAX_CACHED = 20;
 const STORAGE_KEY = 'feeds.v1';
 export const STALE_MS = 30 * 60 * 1000;
 

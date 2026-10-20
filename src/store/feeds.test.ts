@@ -46,7 +46,7 @@ it('keeps the whole feed in memory but caches only the newest episodes', async (
   const s = createFeedStore(createMemoryKV(), jest.fn().mockResolvedValue(xml));
   await s.getState().refresh(pod);
   expect(s.getState().full['1'].episodes).toHaveLength(130);
-  expect(s.getState().feeds['1'].episodes).toHaveLength(50);
+  expect(s.getState().feeds['1'].episodes).toHaveLength(20);
   expect(s.getState().feeds['1'].total).toBe(130);
   expect(s.getState().full['1'].meta.description).toBe('D');
 });
