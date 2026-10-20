@@ -17,12 +17,8 @@ import { Icon } from '@/components/ui/icon';
 import { HEADER_HEIGHT } from '@/components/ui/screen-header';
 import { useTheme } from '@/hooks/use-theme';
 import { contentHeight, metricsFor, mountedRange, nearCenter, slotAt, slotRect, tileAt, visibleRange, type GridMetrics } from '@/lib/grid';
+import { FOLDER_ZOOM, setZoomOrigin, ZOOM_MS } from '@/lib/folder-zoom';
 import { reorder } from '@/lib/layout';
-
-/** Opening a folder: that folder's tile (only) expands towards you and fades while the folder page fades in. */
-const FOLDER_ZOOM = true;
-/** How long the zoom into a folder, and the zoom back out of it, take (the route fade in `(podcasts)/_layout.tsx` matches). */
-const ZOOM_MS = 500;
 
 export type GridItem = { key: string; kind: 'podcast' | 'folder' };
 
@@ -105,6 +101,7 @@ export function TileGrid({
   const zoom = useSharedValue(0);
   const [zoomKey, setZoomKey] = useState<string | null>(null); // the folder being opened (its tile is drawn as a zooming copy)
   const zoomTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rootRef = useRef<View>(null);
   const focused = useIsFocused();
   const scrollNow = useRef(0);
   const contentH = useRef(0);
@@ -347,6 +344,10 @@ export function TileGrid({
       zoom.set(0);
       setZoomKey(item.key);
       zoom.set(withTiming(1, { duration: ZOOM_MS }));
+      // Remember where this tile is on screen, so the folder page can shrink back into it when it closes.
+      const rect = slotRect(at, m);
+      const scroll = scrollNow.current;
+      rootRef.current?.measureInWindow((x, y) => setZoomOrigin({ x: x + rect.left + m.tile / 2, y: y + rect.top + m.tile / 2 - scroll, size: m.tile }));
     }
     if (item) onPress(item);
   };
@@ -387,15 +388,34 @@ export function TileGrid({
       transform: [{ scale: 1.07 }],
     };
   });
-  // Back from the folder: the tile zooms back into place, then the copy goes away.
+  // Back from the folder: the tile zooms back into place, then the copy goes away. Only after this screen has really been
+  // left (focus lost) and then regained: while the tap that started the zoom is still on this screen it must not run.
+  const wasAway = useRef(false);
   useEffect(() => {
-    if (!FOLDER_ZOOM || !focused || zoomKey === null) return;
+    if (!FOLDER_ZOOM || zoomKey === null) return;
+    if (!focused) {
+      wasAway.current = true;
+      return;
+    }
+    if (!wasAway.current) return;
+    wasAway.current = false;
     zoom.set(withTiming(0, { duration: ZOOM_MS }));
     zoomTimer.current = setTimeout(() => setZoomKey(null), ZOOM_MS + 30);
     return () => {
       if (zoomTimer.current) clearTimeout(zoomTimer.current);
     };
   }, [focused, zoomKey, zoom]);
+  // If the folder never opened (the screen was never left), put the tile back rather than leave it hidden.
+  useEffect(() => {
+    if (zoomKey === null) return;
+    const t = setTimeout(() => {
+      if (!wasAway.current && focused) {
+        zoom.set(withTiming(0, { duration: 200 }));
+        setZoomKey(null);
+      }
+    }, ZOOM_MS + 1500);
+    return () => clearTimeout(t);
+  }, [zoomKey, focused, zoom]);
   const zoomStyle = useAnimatedStyle(() => {
     const z = zoom.get();
     return { opacity: 1 - z, transform: [{ scale: 1 + z * 4 }] };
@@ -406,7 +426,7 @@ export function TileGrid({
   const dragging = activeKey !== null;
 
   return (
-    <View style={styles.fill} onLayout={onLayout}>
+    <View ref={rootRef} style={styles.fill} onLayout={onLayout}>
       <ScrollView
         ref={scrollRef}
         scrollEnabled={!dragging}
