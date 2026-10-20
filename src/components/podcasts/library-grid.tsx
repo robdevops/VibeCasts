@@ -145,7 +145,7 @@ export function LibraryGrid({ keys, folderId, layout, canReorder, refreshing, on
       onDragFinish={onDragFinish}
       onVisibleChange={onVisibleChange}
       itemVersion={itemVersion}
-      renderItem={(item, size) => {
+      renderItem={(item, size, low) => {
         const { id } = parseKey(item.key);
         if (item.kind === 'folder') {
           const folder = view.folders[id];
@@ -154,7 +154,7 @@ export function LibraryGrid({ keys, folderId, layout, canReorder, refreshing, on
           ) : null;
         }
         const sub = view.subscriptions[id];
-        return sub ? <PodcastTile podcast={sub.podcast} unplayed={view.unplayed[id] ?? 0} size={size} /> : null;
+        return sub ? <PodcastTile podcast={sub.podcast} unplayed={view.unplayed[id] ?? 0} size={size} low={low} /> : null;
       }}
     />
   );
