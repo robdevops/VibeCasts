@@ -34,6 +34,12 @@ type Props = {
   refreshing?: boolean;
   onRefresh?: () => void;
   empty?: ReactNode;
+  /** A drag began on this tile (after the long press). The parent may swap `items` in response; the drag carries on. */
+  onDragBegin?: (key: string) => void;
+  /** A drag ended, whatever the outcome. */
+  onDragFinish?: () => void;
+  /** The range of item indexes near the viewport changed (for loading what is on screen first). */
+  onVisibleChange?: (range: { start: number; end: number }) => void;
 };
 
 type Drag = {
@@ -58,6 +64,9 @@ export function TileGrid({
   refreshing = false,
   onRefresh,
   empty,
+  onDragBegin,
+  onDragFinish,
+  onVisibleChange,
 }: Props) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -88,11 +97,25 @@ export function TileGrid({
 
   const byKey = useMemo(() => new Map(items.map((i) => [i.key, i])), [items]);
   const displayKeys = order ?? items.map((i) => i.key);
+  // Where each tile sits (its slot). The tiles themselves are always rendered in `items` order, so a
+  // drag moves tiles by position only and never reorders the underlying views (reordering views
+  // under an active touch can cancel it).
+  const slotOf = useMemo(() => new Map(displayKeys.map((k, i) => [k, i])), [displayKeys]);
+
+  const visibleCb = useRef(onVisibleChange);
+  useEffect(() => {
+    visibleCb.current = onVisibleChange;
+  });
+  const lastRange = useRef({ start: -1, end: -1 });
 
   const updateWindow = useCallback(
     (y: number) => {
       const next = visibleRange(y, viewportH.current || windowHeight, m, items.length);
       setWin((w) => (w.start === next.start && w.end === next.end ? w : next));
+      if (next.start !== lastRange.current.start || next.end !== lastRange.current.end) {
+        lastRange.current = next;
+        visibleCb.current?.(next);
+      }
     },
     [items.length, m, windowHeight],
   );
@@ -152,6 +175,28 @@ export function TileGrid({
     scrollDir.current = over ? 0 : d.absY < removeBottom + 50 ? -1 : d.absY > windowHeight - 160 ? 1 : 0;
   }, [byKey, canReorder, m, onDropIntoFolder, onRemove, removeBottom, windowHeight]);
 
+  // The list can be swapped while a drag is in progress (a search result being dragged brings up the
+  // whole library). Keep the drag going: rebuild the working order from the new list, with the
+  // dragged tile at the slot under the finger.
+  useEffect(() => {
+    const d = drag.current;
+    if (!d) return;
+    const keys = items.map((i) => i.key);
+    const sameSet = keys.length === orderRef.current.length && keys.every((k) => orderRef.current.includes(k));
+    if (sameSet || !keys.includes(d.key)) return;
+    let next = keys;
+    if (canReorder) {
+      const cx = d.startLeft + d.tx + m.tile / 2;
+      const cy = d.startTop + d.ty + (scrollNow.current - d.startScroll) + m.tile / 2;
+      const target = slotAt(cx, cy, m, keys.length);
+      if (target >= 0) next = reorder(keys, keys.indexOf(d.key), target);
+    }
+    orderRef.current = next;
+    hoverRef.current = null;
+    setHoverFolder(null);
+    setOrder(next);
+  }, [items, canReorder, m]);
+
   const stopTimer = useCallback(() => {
     if (timer.current) clearInterval(timer.current);
     timer.current = null;
@@ -169,6 +214,7 @@ export function TileGrid({
       setOrder(keys);
       setActiveKey(key);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      onDragBegin?.(key);
       stopTimer();
       timer.current = setInterval(() => {
         if (dwell.current) evaluate();
@@ -182,7 +228,7 @@ export function TileGrid({
         evaluate();
       }, 16);
     },
-    [evaluate, items, scrollY, stopTimer],
+    [evaluate, items, onDragBegin, scrollY, stopTimer],
   );
 
   const onDragMove = useCallback(
@@ -214,7 +260,8 @@ export function TileGrid({
     setActiveKey(null);
     setHoverFolder(null);
     setOverRemove(false);
-  }, [items, onDropIntoFolder, onRemove, onReorder, stopTimer]);
+    onDragFinish?.();
+  }, [items, onDragFinish, onDropIntoFolder, onRemove, onReorder, stopTimer]);
 
   const onLayout = (e: LayoutChangeEvent) => {
     setWidth(e.nativeEvent.layout.width);
@@ -258,9 +305,9 @@ export function TileGrid({
         contentContainerStyle={{ minHeight: height }}>
         {width > 0 && items.length > 0 ? (
           <View style={{ height, width }}>
-            {displayKeys.map((key, index) => {
-              const item = byKey.get(key);
-              if (!item) return null;
+            {items.map((item, natural) => {
+              const key = item.key;
+              const index = slotOf.get(key) ?? natural;
               if ((index < win.start || index >= win.end) && key !== activeKey) return null;
               return (
                 <Cell

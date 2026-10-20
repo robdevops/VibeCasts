@@ -132,3 +132,71 @@ describe('conditional refresh (unchanged feeds cost almost nothing)', () => {
     expect(calls).toEqual([undefined, undefined]);
   });
 });
+
+describe('visible-first refresh', () => {
+  const shows = Array.from({ length: 8 }, (_, i) => ({ ...pod, id: `s${i}`, feedUrl: `https://f/${i}` }));
+  const order = () => {
+    const seen: string[] = [];
+    const gates: (() => void)[] = [];
+    const fetchText = jest.fn((url: string) => {
+      seen.push(url.split('/').pop()!);
+      return new Promise<string>((resolve) => gates.push(() => resolve(sampleFeed)));
+    });
+    return { seen, gates, fetchText };
+  };
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+
+  it('fetches in the screen\'s order, not the order the shows are stored', async () => {
+    const t = order();
+    const s = createFeedStore(createMemoryKV(), t.fetchText);
+    s.getState().setPriority(['s7', 's6', 's5', 's4', 's3', 's2', 's1', 's0']);
+    const done = s.getState().refreshAll(shows);
+    await flush();
+    expect(t.seen).toEqual(['7', '6', '5', '4']); // the first four workers took the most wanted
+    t.gates.forEach((g) => g());
+    await flush();
+    t.gates.forEach((g) => g());
+    await done;
+    expect(t.seen).toEqual(['7', '6', '5', '4', '3', '2', '1', '0']);
+  });
+
+  it('re-prioritises while running: scrolling moves the wanted shows to the front', async () => {
+    const t = order();
+    const s = createFeedStore(createMemoryKV(), t.fetchText);
+    s.getState().setPriority(shows.map((p) => p.id));
+    const done = s.getState().refreshAll(shows);
+    await flush();
+    expect(t.seen).toEqual(['0', '1', '2', '3']);
+    s.getState().setPriority(['s7', 's6', 's0', 's1', 's2', 's3', 's4', 's5']); // the user scrolled to the bottom
+    t.gates.splice(0).forEach((g) => g());
+    await flush();
+    expect(t.seen.slice(4, 8)).toEqual(['7', '6', '4', '5']);
+    t.gates.splice(0).forEach((g) => g());
+    await flush();
+    t.gates.splice(0).forEach((g) => g());
+    await done;
+  });
+
+  it('waits while nobody is looking and carries on when they are', async () => {
+    const t = order();
+    const s = createFeedStore(createMemoryKV(), t.fetchText);
+    const done = s.getState().refreshAll(shows.slice(0, 2), { whileLooking: true });
+    await flush();
+    expect(t.seen).toEqual([]); // phone locked / other tab: nothing fetched
+    s.getState().setLooking(true);
+    await flush();
+    expect(t.seen).toHaveLength(2);
+    t.gates.splice(0).forEach((g) => g());
+    await done;
+  });
+
+  it('background refreshes (no screen) do not wait', async () => {
+    const t = order();
+    const s = createFeedStore(createMemoryKV(), t.fetchText);
+    const done = s.getState().refreshAll(shows.slice(0, 2));
+    await flush();
+    expect(t.seen).toHaveLength(2);
+    t.gates.splice(0).forEach((g) => g());
+    await done;
+  });
+});

@@ -13,7 +13,6 @@ import { registerAutoDownloadTask } from '@/downloads/background';
 import { useDownloads } from '@/downloads/download-manager';
 import { startNewEpisodeNotifications } from '@/notifications';
 import { configureNotifications } from '@/notifications/platform';
-import { prefetchTileArtwork } from '@/lib/prefetch-artwork';
 import { playerLog } from '@/player/event-log';
 import { useBookmarks } from '@/store/bookmarks';
 import { useFeeds } from '@/store/feeds';
@@ -69,16 +68,8 @@ export default function RootLayout() {
   useEffect(() => {
     if (ready) void SplashScreen.hideAsync();
     const t = setTimeout(() => void SplashScreen.hideAsync(), 3000);
-    // After first paint, fetch the grid's artwork into the image cache.
-    const warm = ready
-      ? setTimeout(() => {
-          const subs = Object.values(useLibrary.getState().subscriptions);
-          void prefetchTileArtwork(subs.map((x) => x.podcast.artwork));
-        }, 600)
-      : undefined;
     return () => {
       clearTimeout(t);
-      if (warm) clearTimeout(warm);
     };
   }, [ready]);
 

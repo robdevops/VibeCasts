@@ -36,9 +36,18 @@ type Actions = {
   ingest(podcast: Podcast, parsed: ParsedFeed, validators?: FeedValidators): void;
   /** `conditional`: send the saved validators and skip the work if the feed hasn't changed (bulk and background refreshes). */
   refresh(podcast: Podcast, opts?: { conditional?: boolean }): Promise<void>;
-  refreshAll(podcasts: Podcast[], opts?: { onlyStale?: boolean }): Promise<void>;
+  /**
+   * Refresh several feeds, 4 at a time, nearest the viewport first (see `setPriority`).
+   * `whileLooking`: pause while nobody is looking at the library (phone locked, another tab) and carry on when they are.
+   */
+  refreshAll(podcasts: Podcast[], opts?: { onlyStale?: boolean; whileLooking?: boolean }): Promise<void>;
   /** Fetch details for shows added from a file (3 at a time), reporting progress for a banner. */
-  backfill(podcasts: Podcast[]): Promise<void>;
+  backfill(podcasts: Podcast[], opts?: { whileLooking?: boolean }): Promise<void>;
+  /** The podcast ids in the order the screen wants them, most wanted first (asked again before every pick). */
+  setPriority(ids: string[]): void;
+  /** Is the Podcasts screen on screen with the phone unlocked? Bulk work started with `whileLooking` waits for this. */
+  looking: boolean;
+  setLooking(looking: boolean): void;
   /** Null when no backfill is running. */
   backfillProgress: { done: number; total: number } | null;
 };
@@ -68,6 +77,20 @@ export function createFeedStore(
   /** Called with a show's own details after each successful fetch (fills in imported shows). */
   onMeta: (podcastId: string, meta: FeedMeta) => void = () => {},
 ) {
+  // Where each podcast sits in the order the screen wants them (lower = sooner).
+  let rank = new Map<string, number>();
+  const rankOf = (p: Podcast) => rank.get(p.id) ?? Number.MAX_SAFE_INTEGER;
+  /** Remove and return the most wanted pending podcast (the order is re-read on every pick, so scrolling re-prioritises). */
+  const takeNext = (pending: Podcast[]): Podcast | undefined => {
+    let best = -1;
+    for (let i = 0; i < pending.length; i++) {
+      if (best < 0 || rankOf(pending[i]) < rankOf(pending[best])) best = i;
+    }
+    return best < 0 ? undefined : pending.splice(best, 1)[0];
+  };
+  // Bulk workers parked until the library is on screen again.
+  const lookWaiters: (() => void)[] = [];
+
   const store = create<FeedData & Actions>()((set, get) => ({
     feeds: {},
     known: {},
@@ -75,6 +98,7 @@ export function createFeedStore(
     full: {},
     hydrated: false,
     backfillProgress: null,
+    looking: false,
 
     remember(p) {
       if (get().known[p.id]?.feedUrl === p.feedUrl && get().known[p.id]?.title === p.title) return;
@@ -132,23 +156,41 @@ export function createFeedStore(
       }
     },
 
-    async refreshAll(podcasts, opts) {
-      const now = Date.now();
-      const todo = podcasts.filter((p) => !opts?.onlyStale || now - (get().feeds[p.id]?.fetchedAt ?? 0) > STALE_MS);
-      for (let i = 0; i < todo.length; i += 4) {
-        await Promise.all(todo.slice(i, i + 4).map((p) => get().refresh(p, { conditional: true })));
-      }
+    setPriority(ids) {
+      rank = new Map(ids.map((id, i) => [id, i]));
     },
 
-    async backfill(podcasts) {
+    setLooking(looking) {
+      if (get().looking === looking) return;
+      set({ looking });
+      if (looking) lookWaiters.splice(0).forEach((resume) => resume());
+    },
+
+    async refreshAll(podcasts, opts) {
+      const now = Date.now();
+      const pending = podcasts.filter((p) => !opts?.onlyStale || now - (get().feeds[p.id]?.fetchedAt ?? 0) > STALE_MS);
+      const worker = async () => {
+        for (;;) {
+          if (opts?.whileLooking && !get().looking) await new Promise<void>((resume) => lookWaiters.push(resume));
+          const p = takeNext(pending);
+          if (!p) return;
+          await get().refresh(p, { conditional: true });
+        }
+      };
+      await Promise.all([worker(), worker(), worker(), worker()]);
+    },
+
+    async backfill(podcasts, opts) {
       if (get().backfillProgress) return;
       const todo = podcasts.filter((p) => p.needsMeta && p.feedUrl);
       if (!todo.length) return;
       set({ backfillProgress: { done: 0, total: todo.length } });
-      let next = 0;
+      const pending = [...todo];
       const worker = async () => {
-        while (next < todo.length) {
-          const p = todo[next++];
+        for (;;) {
+          if (opts?.whileLooking && !get().looking) await new Promise<void>((resume) => lookWaiters.push(resume));
+          const p = takeNext(pending);
+          if (!p) return;
           await get().refresh(p);
           set((s) => ({ backfillProgress: s.backfillProgress && { ...s.backfillProgress, done: s.backfillProgress.done + 1 } }));
           // Let the UI breathe between big XML parses.
