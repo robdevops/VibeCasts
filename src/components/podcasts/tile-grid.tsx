@@ -1,4 +1,5 @@
 import * as Haptics from 'expo-haptics';
+import { useIsFocused } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -95,6 +96,12 @@ export function TileGrid({
   const ghostSettling = useSharedValue(false);
   const ghostX = useSharedValue(0);
   const ghostY = useSharedValue(0);
+  // Opening a folder zooms the grid towards you (about the tapped tile) while it fades out; coming back reverses it.
+  const zoom = useSharedValue(0);
+  const zoomX = useSharedValue(0);
+  const zoomY = useSharedValue(0);
+  const zoomed = useRef(false);
+  const focused = useIsFocused();
   const scrollNow = useRef(0);
   const contentH = useRef(0);
   const viewportH = useRef(0);
@@ -331,6 +338,13 @@ export function TileGrid({
     const keys = order ?? items.map((i) => i.key);
     const at = tileAt(x, y, m, keys.length);
     const item = at >= 0 ? byKey.get(keys[at]) : undefined;
+    if (item?.kind === 'folder') {
+      const rect = slotRect(at, m);
+      zoomX.set(rect.left + m.tile / 2);
+      zoomY.set(rect.top + m.tile / 2 - scrollNow.current);
+      zoomed.current = true;
+      zoom.set(withTiming(1, { duration: 300 }));
+    }
     if (item) onPress(item);
   };
   const latest = useRef({ pressAt, onDragStart, onDragMove, onDragEnd, renderItem });
@@ -370,11 +384,21 @@ export function TileGrid({
       transform: [{ scale: 1.07 }],
     };
   });
+  useEffect(() => {
+    if (focused && zoomed.current) {
+      zoomed.current = false;
+      zoom.set(withTiming(0, { duration: 280 }));
+    }
+  }, [focused, zoom]);
+  const zoomStyle = useAnimatedStyle(() => {
+    const z = zoom.get();
+    return { opacity: 1 - z, transform: [{ scale: 1 + z * 1.6 }], transformOrigin: [zoomX.get(), zoomY.get(), 0] };
+  });
   const ghostItem = ghostKey ? byKey.get(ghostKey) : undefined;
   const dragging = activeKey !== null;
 
   return (
-    <View style={styles.fill} onLayout={onLayout}>
+    <Animated.View style={[styles.fill, zoomStyle]} onLayout={onLayout}>
       <ScrollView
         ref={scrollRef}
         scrollEnabled={!dragging}
@@ -431,7 +455,7 @@ export function TileGrid({
           </ThemedText>
         </View>
       ) : null}
-    </View>
+    </Animated.View>
   );
 }
 
