@@ -82,6 +82,16 @@ export function TileGrid({
 
   const scrollRef = useRef<ScrollView>(null);
   const scrollY = useSharedValue(0);
+  // Only one tile is dragged at a time, so its drag values are shared by every tile instead of each creating its own five.
+  const dragTx = useSharedValue(0);
+  const dragTy = useSharedValue(0);
+  const dragStartScroll = useSharedValue(0);
+  const dragStartLeft = useSharedValue(0);
+  const dragStartTop = useSharedValue(0);
+  const drag$ = useMemo(
+    () => ({ tx: dragTx, ty: dragTy, startScroll: dragStartScroll, startLeft: dragStartLeft, startTop: dragStartTop }),
+    [dragTx, dragTy, dragStartScroll, dragStartLeft, dragStartTop],
+  );
   const scrollNow = useRef(0);
   const contentH = useRef(0);
   const viewportH = useRef(0);
@@ -329,6 +339,7 @@ export function TileGrid({
                   active={key === activeKey}
                   highlighted={key === hoverFolder}
                   scrollY={scrollY}
+                  dragValues={drag$}
                   draggable={canReorder || !!onDropIntoFolder || !!onRemove}
                   onPress={stable.onPress}
                   onDragStart={stable.onDragStart}
@@ -370,12 +381,22 @@ type CellProps = {
   highlighted: boolean;
   draggable: boolean;
   scrollY: SharedValue<number>;
+  dragValues: DragValues;
   onPress: (item: GridItem) => void;
   onDragStart: (key: string, left: number, top: number) => void;
   onDragMove: (tx: number, ty: number, absY: number) => void;
   onDragEnd: () => void;
   renderItem: (item: GridItem, size: number) => ReactNode;
   version: string | number;
+};
+
+/** The values that follow the finger while a tile is dragged (shared by all tiles: one is dragged at a time). */
+type DragValues = {
+  tx: SharedValue<number>;
+  ty: SharedValue<number>;
+  startScroll: SharedValue<number>;
+  startLeft: SharedValue<number>;
+  startTop: SharedValue<number>;
 };
 
 /** Re-render a tile only when something it shows or does has changed. */
@@ -392,6 +413,7 @@ const sameCell = (a: CellProps, b: CellProps) =>
   a.draggable === b.draggable &&
   a.version === b.version &&
   a.scrollY === b.scrollY &&
+  a.dragValues === b.dragValues &&
   a.onPress === b.onPress &&
   a.onDragStart === b.onDragStart &&
   a.onDragMove === b.onDragMove &&
@@ -399,15 +421,11 @@ const sameCell = (a: CellProps, b: CellProps) =>
 
 const Cell = memo(CellBase, sameCell);
 
-function CellBase({ item, index, m, active, highlighted, draggable, scrollY, onPress, onDragStart, onDragMove, onDragEnd, renderItem }: CellProps) {
+function CellBase({ item, index, m, active, highlighted, draggable, scrollY, dragValues, onPress, onDragStart, onDragMove, onDragEnd, renderItem }: CellProps) {
   const rect = slotRect(index, m);
   const x = useSharedValue(rect.left);
   const y = useSharedValue(rect.top);
-  const tx = useSharedValue(0);
-  const ty = useSharedValue(0);
-  const startScroll = useSharedValue(0);
-  const startLeft = useSharedValue(0);
-  const startTop = useSharedValue(0);
+  const { tx, ty, startScroll, startLeft, startTop } = dragValues;
   const wasActive = useRef(false);
 
   useEffect(() => {
