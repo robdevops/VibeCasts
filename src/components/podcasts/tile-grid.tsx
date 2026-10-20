@@ -119,9 +119,11 @@ export function TileGrid({
   const updateWindow = useCallback(
     (y: number) => {
       const next = visibleRange(y, viewportH.current || windowHeight, m, items.length);
-      // Keep recently visible tiles mounted (only let go of far-away ones): remounting makes art flash.
+      // Mount well ahead of the screen (6 rows) so a moderate scroll doesn't outrun the tiles being mounted; the ones
+      // beyond `next` use the small artwork. Keep recently visible tiles mounted (only let go of far-away ones).
+      const ahead = visibleRange(y, viewportH.current || windowHeight, m, items.length, 6);
       setWin((w) => {
-        const merged = mountedRange(w, next, m.cols);
+        const merged = mountedRange(w, ahead, m.cols);
         return merged.start === w.start && merged.end === w.end ? w : merged;
       });
       setNear((n) => (n.start === next.start && n.end === next.end ? n : next));
