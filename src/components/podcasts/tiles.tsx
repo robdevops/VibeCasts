@@ -14,10 +14,10 @@ const shadow = {
   elevation: 4,
 } as const;
 
-export function PodcastTile({ podcast, unplayed, size, low }: { podcast: Podcast; unplayed: number; size: number; low?: boolean }) {
+export function PodcastTile({ podcast, unplayed, size }: { podcast: Podcast; unplayed: number; size: number }) {
   return (
     <View style={{ width: size, height: size }} accessibilityLabel={podcast.title} accessibilityRole="button">
-      <Artwork uri={podcast.artwork} title={podcast.title} size={size} radius={8} style={shadow} low={low} />
+      <Artwork uri={podcast.artwork} title={podcast.title} size={size} radius={8} style={shadow} />
       <Badge count={unplayed} />
     </View>
   );
