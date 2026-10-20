@@ -1,8 +1,10 @@
 import Slider from '@react-native-community/slider';
+import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import { LayoutAnimation, Linking, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { LayoutAnimation, Linking, Pressable, ScrollView, Share, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
+import Animated, { interpolate, useAnimatedStyle, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { Episode, Podcast } from '@/api/types';
@@ -57,6 +59,8 @@ export function EpisodeView({ podcastId, episodeId, onClose, sheet: isSheet = fa
   const params = { podcastId, episodeId };
   const insets = useSafeAreaInsets();
   const sheetDrag = usePlayerSheetDrag();
+  const { width: pageWidth } = useWindowDimensions();
+  const pagerX = useSharedValue(0);
 
   const current = usePlayer((s) => s.current);
   const playing = usePlayer((s) => s.playing);
@@ -144,8 +148,12 @@ export function EpisodeView({ podcastId, episodeId, onClose, sheet: isSheet = fa
       useToast.getState().show('Play the episode to add a bookmark');
       return;
     }
-    useBookmarks.getState().add(podcast.id, episode.id, positionSec);
-    useToast.getState().show(`Bookmarked at ${formatClock(positionSec)}`);
+    const at = Math.round(usePlayer.getState().positionSec);
+    const before = useBookmarks.getState().items.length;
+    useBookmarks.getState().add(podcast.id, episode.id, at);
+    const added = useBookmarks.getState().items.length > before;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    useToast.getState().show(added ? `Bookmarked at ${formatClock(at)}` : `Already bookmarked at ${formatClock(at)}`);
   };
 
   const openQueue = () => {
@@ -201,7 +209,7 @@ export function EpisodeView({ podcastId, episodeId, onClose, sheet: isSheet = fa
         <View style={styles.body}>
           {!isCurrent ? (
             <View style={styles.previewTop}>
-              <View style={styles.previewHead}>
+              <Draggable drag={isSheet ? sheetDrag : undefined} style={styles.previewHead}>
                 <Artwork uri={episode.artwork ?? podcast.artwork} title={podcast.title} size={88} radius={14} />
                 <View style={{ flex: 1, gap: 4 }}>
                   <ThemedText type="small" style={{ color: MUTED }}>
@@ -216,13 +224,13 @@ export function EpisodeView({ podcastId, episodeId, onClose, sheet: isSheet = fa
                     </ThemedText>
                   </Pressable>
                 </View>
-              </View>
+              </Draggable>
               <ScrollView style={styles.notesPanel} contentContainerStyle={styles.notesContent} accessibilityLabel="Show notes">
                 <ThemedText style={styles.notes}>{stripHtml(episode.description) || (feedLoading || needsNotes ? 'Loading show notes…' : 'No show notes for this episode.')}</ThemedText>
               </ScrollView>
             </View>
           ) : (
-            <>
+            <Draggable drag={isSheet ? sheetDrag : undefined} style={styles.fillArea}>
               <View style={styles.artWrap}>
                 <Artwork uri={episode.artwork ?? podcast.artwork} title={podcast.title} radius={18} style={styles.art} />
               </View>
@@ -236,7 +244,7 @@ export function EpisodeView({ podcastId, episodeId, onClose, sheet: isSheet = fa
               </ThemedText>
             </Pressable>
           </View>
-            </>
+            </Draggable>
           )}
 
           <SwipeIgnore style={styles.scrubWrap}>
@@ -347,9 +355,9 @@ export function EpisodeView({ podcastId, episodeId, onClose, sheet: isSheet = fa
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
-      <Header tab={tab} tabs={tabList} onTab={setTab} onClose={onClose} onQueue={openQueue} drag={isSheet ? sheetDrag : undefined} />
+      <Header tab={tab} tabs={tabList} onTab={setTab} onClose={onClose} onQueue={openQueue} drag={isSheet ? sheetDrag : undefined} pagerX={pagerX} pageWidth={pageWidth} />
 
-      <TabPager tabs={tabList} tab={tab} onTab={setTab} panels={{ playing: playingPanel, details: detailsPanel, bookmarks: bookmarksPanel }} />
+      <TabPager tabs={tabList} tab={tab} onTab={setTab} x={pagerX} panels={{ playing: playingPanel, details: detailsPanel, bookmarks: bookmarksPanel }} />
 
       <SpeedSheet visible={sheet === 'speed'} rate={rate} onChange={(r) => usePlayer.getState().setRate(r)} onClose={() => setSheet(null)} />
       <SleepSheet visible={sheet === 'sleep'} sleep={sleep} now={now} onChoose={(o) => usePlayer.getState().setSleep(o)} onClose={() => setSheet(null)} />
@@ -371,21 +379,32 @@ function goToPodcast(id: string, leave: () => void) {
 
 const TAB_LABEL: Record<Tab, string> = { playing: 'Playing', details: 'Details', bookmarks: 'Bookmarks' };
 
-function Header({ tab, tabs, onTab, onClose, onQueue, drag }: { tab: Tab; tabs: Tab[]; onTab: (t: Tab) => void; onClose: () => void; onQueue?: () => void; drag?: ReturnType<typeof usePlayerSheetDrag> }) {
+function Header({
+  tab,
+  tabs,
+  onTab,
+  onClose,
+  onQueue,
+  drag,
+  pagerX,
+  pageWidth = 1,
+}: {
+  tab: Tab;
+  tabs: Tab[];
+  onTab: (t: Tab) => void;
+  onClose: () => void;
+  onQueue?: () => void;
+  drag?: ReturnType<typeof usePlayerSheetDrag>;
+  /** The pager's live offset: the tab labels and underline follow it while you swipe. */
+  pagerX?: SharedValue<number>;
+  pageWidth?: number;
+}) {
   const row = (
     <View style={styles.header}>
       <Pressable accessibilityRole="button" accessibilityLabel="Close player" onPress={onClose} hitSlop={10} style={styles.close}>
         <Icon name="keyboard-arrow-down" size={32} color="#fff" />
       </Pressable>
-      <View style={styles.tabs}>
-        {tabs.map((t) => (
-          <Pressable key={t} accessibilityRole="tab" accessibilityState={{ selected: tab === t }} onPress={() => onTab(t)} style={[styles.tab, tab === t ? styles.tabOn : null]}>
-            <ThemedText type="smallBold" style={{ color: tab === t ? '#fff' : MUTED, fontSize: 16 }}>
-              {TAB_LABEL[t]}
-            </ThemedText>
-          </Pressable>
-        ))}
-      </View>
+      <TabStrip tab={tab} tabs={tabs} onTab={onTab} pagerX={pagerX} pageWidth={pageWidth} />
       {onQueue ? (
         <Pressable accessibilityRole="button" accessibilityLabel="Up Next" onPress={onQueue} hitSlop={10} style={styles.queue}>
           <Icon name="queue-music" size={26} color="#fff" />
@@ -395,6 +414,66 @@ function Header({ tab, tabs, onTab, onClose, onQueue, drag }: { tab: Tab; tabs: 
   );
   // In the sheet, dragging the header pushes the player down in real time.
   return drag ? <GestureDetector gesture={drag}>{row}</GestureDetector> : row;
+}
+
+/** The tab labels with an underline that slides along with the pager as you swipe (no waiting for it to settle). */
+function TabStrip({ tab, tabs, onTab, pagerX, pageWidth }: { tab: Tab; tabs: Tab[]; onTab: (t: Tab) => void; pagerX?: SharedValue<number>; pageWidth: number }) {
+  const layouts = useSharedValue<{ x: number; w: number }[]>([]);
+  const own = useSharedValue(0);
+  const offset = pagerX ?? own;
+  const index = Math.max(0, tabs.indexOf(tab));
+  useEffect(() => {
+    if (!pagerX) own.set(-index * pageWidth);
+  }, [pagerX, own, index, pageWidth]);
+
+  const count = tabs.length;
+  const underline = useAnimatedStyle(() => {
+    const ls = layouts.get();
+    if (ls.length !== count) return { opacity: 0 };
+    const f = Math.min(count - 1, Math.max(0, -offset.get() / pageWidth));
+    if (count < 2) return { opacity: 1, left: ls[0].x, width: ls[0].w };
+    const idx = ls.map((_, i) => i);
+    return { opacity: 1, left: interpolate(f, idx, ls.map((l) => l.x)), width: interpolate(f, idx, ls.map((l) => l.w)) };
+  });
+
+  return (
+    <View style={styles.tabs}>
+      {tabs.map((t, i) => (
+        <Pressable
+          key={t}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: tab === t }}
+          onPress={() => onTab(t)}
+          onLayout={(e) => {
+            const { x, width } = e.nativeEvent.layout;
+            const next = layouts.get().slice();
+            next[i] = { x, w: width };
+            layouts.set(next);
+          }}
+          style={styles.tab}>
+          <TabLabel text={TAB_LABEL[t]} index={i} offset={offset} pageWidth={pageWidth} />
+        </Pressable>
+      ))}
+      <Animated.View pointerEvents="none" style={[styles.underline, underline]} />
+    </View>
+  );
+}
+
+function TabLabel({ text, index, offset, pageWidth }: { text: string; index: number; offset: SharedValue<number>; pageWidth: number }) {
+  const style = useAnimatedStyle(() => ({ opacity: interpolate(-offset.get() / pageWidth, [index - 1, index, index + 1], [0.65, 1, 0.65], 'clamp') }));
+  return (
+    <Animated.View style={style}>
+      <ThemedText type="smallBold" style={{ color: '#fff', fontSize: 16 }}>
+        {text}
+      </ThemedText>
+    </Animated.View>
+  );
+}
+
+/** Lets a part of the player be dragged down to collapse it into the mini player. */
+function Draggable({ drag, style, children }: { drag?: ReturnType<typeof usePlayerSheetDrag>; style?: object; children: ReactNode }) {
+  const view = <View style={style}>{children}</View>;
+  return drag ? <GestureDetector gesture={drag}>{view}</GestureDetector> : view;
 }
 
 function BarButton({ name, label, text, active, onPress }: { name: IconName; label: string; text?: string; active?: boolean; onPress: () => void }) {
@@ -411,9 +490,9 @@ const styles = StyleSheet.create({
   queue: { marginLeft: 'auto', paddingHorizontal: 8 },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, height: 56 },
   close: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  tabs: { flexDirection: 'row', gap: 4 },
-  tab: { paddingHorizontal: 10, paddingVertical: 8, borderBottomWidth: 3, borderBottomColor: 'transparent' },
-  tabOn: { borderBottomColor: '#fff' },
+  tabs: { flexDirection: 'row', gap: 4, position: 'relative' },
+  tab: { paddingHorizontal: 10, paddingVertical: 8, paddingBottom: 11 },
+  underline: { position: 'absolute', bottom: 0, height: 3, backgroundColor: '#fff' },
   body: { flex: 1, paddingHorizontal: 20, justifyContent: 'space-between' },
   artWrap: { flex: 1, justifyContent: 'center', paddingVertical: 8 },
   art: { alignSelf: 'center', width: '100%', maxWidth: 380, shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 20, shadowOffset: { width: 0, height: 10 }, elevation: 10 },
@@ -434,6 +513,7 @@ const styles = StyleSheet.create({
   detailTitle: { color: '#fff', fontSize: 17, lineHeight: 23 },
   playCta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#fff', borderRadius: 26, paddingVertical: 12 },
   dim: { opacity: 0.35 },
+  fillArea: { flex: 1 },
   previewTop: { flex: 1, gap: 12, paddingTop: 8 },
   previewHead: { flexDirection: 'row', gap: 14, alignItems: 'center' },
   notesPanel: { flex: 1, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.06)' },
