@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useMemo } from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 
+import { ELASTIC_SCROLL } from '@/constants/scroll';
 import type { Episode } from '@/api/types';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -46,6 +47,7 @@ export function EpisodeListScreen({
     <ThemedView style={styles.fill}>
       <ScreenHeader title={title} back />
       <FlatList
+        {...ELASTIC_SCROLL}
         data={rows}
         keyExtractor={(r) => `${r.episode.podcastId}|${r.episode.id}`}
         contentContainerStyle={{ flexGrow: 1 }}

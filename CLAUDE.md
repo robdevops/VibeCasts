@@ -25,6 +25,9 @@ Each tab is a route group with its own stack (`src/app/(tabs)/(podcasts)`, `(dis
 ## Local (macOS) emulator
 Node 24 (`.nvmrc`), Xcode (iOS Simulator), Android Studio (AVD). `npx expo start`, then `i` / `a`. Claude Code run locally can screenshot with `xcrun simctl io booted screenshot x.png` or `adb exec-out screencap -p > x.png`.
 
+## Scrolling
+Vertical lists spread `ELASTIC_SCROLL` (`constants/scroll.ts`: `overScrollMode: 'always'`, `bounces`, `alwaysBounceVertical`) so they stretch at the top and bottom like an elastic band: iOS bounce, and on Android the system's own overscroll (the stretch effect on Android 12+, a glow on older versions). Popover menus keep `bounces={false}` on purpose.
+
 ## Gotchas
 - The `TileGrid` gesture (`useGridGesture`) is memoised on purpose: recreating a `Gesture` on re-render cancels an in-progress drag. Keep handlers stable (see the `latest` ref there).
 - Use `sharedValue.set()`/`.get()` for writes (the React Compiler lint rule rejects `.value =`).

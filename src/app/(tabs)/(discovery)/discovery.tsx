@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ELASTIC_SCROLL } from '@/constants/scroll';
 import { FeedError } from '@/api/feed-fetch';
 import { GENRES, lookupPodcast, searchEpisodes, searchPodcasts, topPodcasts } from '@/api/itunes';
 import type { Episode, Podcast } from '@/api/types';
@@ -129,6 +130,7 @@ export default function DiscoveryScreen() {
           </View>
           {tab === 'podcasts' ? (
             <FlatList
+              {...ELASTIC_SCROLL}
               data={podcastResults.data ?? []}
               keyExtractor={(p) => p.id}
               keyboardShouldPersistTaps="handled"
@@ -137,6 +139,7 @@ export default function DiscoveryScreen() {
             />
           ) : (
             <FlatList
+              {...ELASTIC_SCROLL}
               data={episodeResults.data ?? []}
               keyExtractor={(e) => e.id}
               keyboardShouldPersistTaps="handled"
@@ -200,7 +203,7 @@ export default function DiscoveryScreen() {
           )}
         </View>
       ) : (
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 32 }}>
+        <ScrollView {...ELASTIC_SCROLL} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 32 }}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
             {[{ id: undefined, name: 'All categories' }, ...GENRES].map((g) => (
               <Pressable

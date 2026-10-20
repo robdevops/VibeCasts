@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useMemo } from 'react';
 import { ActivityIndicator, Pressable, SectionList, StyleSheet, View } from 'react-native';
 
+import { ELASTIC_SCROLL } from '@/constants/scroll';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { confirmAsync } from '@/components/ui/confirm';
@@ -70,6 +71,7 @@ export default function DownloadsScreen() {
         </View>
       ) : (
         <SectionList
+          {...ELASTIC_SCROLL}
           sections={sections}
           keyExtractor={(r) => r.key}
           stickySectionHeadersEnabled={false}

@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ELASTIC_SCROLL } from '@/constants/scroll';
 import { lookupPodcast } from '@/api/itunes';
 import { releaseSchedule } from '@/api/rss';
 import type { Episode } from '@/api/types';
@@ -464,6 +465,7 @@ export default function PodcastScreen() {
   return (
     <ThemedView style={styles.fill}>
       <FlatList
+        {...ELASTIC_SCROLL}
         data={tab === 'episodes' ? shown : []}
         keyExtractor={(e) => e.id}
         extraData={`${selected.size}|${[...selected].join(',')}`}

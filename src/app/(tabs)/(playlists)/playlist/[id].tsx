@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 
+import { ELASTIC_SCROLL } from '@/constants/scroll';
 import { confirmAsync } from '@/components/ui/confirm';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -100,6 +101,7 @@ export default function PlaylistScreen() {
         </View>
       ) : (
         <FlatList
+          {...ELASTIC_SCROLL}
           data={items}
           keyExtractor={(r) => refKey(r)}
           renderItem={({ item, index }) => (

@@ -7,6 +7,7 @@ import { GestureDetector } from 'react-native-gesture-handler';
 import Animated, { interpolate, useAnimatedStyle, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ELASTIC_SCROLL } from '@/constants/scroll';
 import type { Episode, Podcast } from '@/api/types';
 import { ThemedText } from '@/components/themed-text';
 import { Artwork } from '@/components/ui/artwork';
@@ -245,7 +246,7 @@ export function EpisodeView({ podcastId, episodeId, onClose, sheet: isSheet = fa
                   </Pressable>
                 </View>
               </Draggable>
-              <ScrollView style={styles.notesPanel} contentContainerStyle={styles.notesContent} accessibilityLabel="Show notes">
+              <ScrollView {...ELASTIC_SCROLL} style={styles.notesPanel} contentContainerStyle={styles.notesContent} accessibilityLabel="Show notes">
                 <ThemedText style={styles.notes}>{stripHtml(episode.description) || notesFallback}</ThemedText>
               </ScrollView>
             </View>
@@ -313,7 +314,7 @@ export function EpisodeView({ podcastId, episodeId, onClose, sheet: isSheet = fa
         </View>
   );
   const detailsPanel = (
-      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 24 }]}>
+      <ScrollView {...ELASTIC_SCROLL} contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 24 }]}>
             <>
               <View style={styles.detailHead}>
                 <Artwork uri={episode.artwork ?? podcast.artwork} title={podcast.title} size={72} radius={10} />
@@ -340,7 +341,7 @@ export function EpisodeView({ podcastId, episodeId, onClose, sheet: isSheet = fa
       </ScrollView>
   );
   const bookmarksPanel = (
-      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 24 }]}>
+      <ScrollView {...ELASTIC_SCROLL} contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 24 }]}>
             <>
               <Pressable accessibilityRole="button" onPress={addBookmark} style={[styles.playCta, !isCurrent ? { opacity: 0.4 } : null]}>
                 <Icon name="bookmark-add" size={22} color={BG} />
