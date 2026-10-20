@@ -1,6 +1,5 @@
-import { router } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { GestureDetector } from 'react-native-gesture-handler';
 
 import { ThemedText } from '@/components/themed-text';
 import { Artwork } from '@/components/ui/artwork';
@@ -9,11 +8,15 @@ import { useTheme } from '@/hooks/use-theme';
 import { useSettings } from '@/store/settings';
 import { usePlayer } from '@/store/player';
 
+import { openPlayerSheet, usePlayerSheetDrag } from './sheet-state';
 import { SkipIcon } from './skip-icon';
 
-const openEpisode = () => router.push('/episode');
+const openEpisode = openPlayerSheet;
 
-/** Persistent playback bar above the tab bar. Tap, or swipe up, to open the episode screen. */
+/**
+ * Persistent playback bar above the tab bar. Tap it to open the player, or drag it up: the player
+ * follows your finger and opens if you pull it past the halfway point, otherwise it springs back.
+ */
 export function MiniPlayer() {
   const theme = useTheme();
   const current = usePlayer((s) => s.current);
@@ -23,19 +26,13 @@ export function MiniPlayer() {
   const skipBack = useSettings((s) => s.skipBackSec);
   const skipForward = useSettings((s) => s.skipForwardSec);
 
-  const swipeUp = Gesture.Pan()
-    .activeOffsetY([-14, 14])
-    .failOffsetX([-24, 24])
-    .runOnJS(true)
-    .onEnd((e) => {
-      if (e.translationY < -40 || e.velocityY < -600) openEpisode();
-    });
+  const drag = usePlayerSheetDrag();
 
   if (!current) return null;
   const { episode, podcast } = current;
 
   return (
-    <GestureDetector gesture={swipeUp}>
+    <GestureDetector gesture={drag}>
       <View style={[styles.card, { backgroundColor: theme.accentSoft }]}>
         <View style={styles.row}>
           <Pressable
