@@ -1,4 +1,4 @@
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -23,15 +23,20 @@ type Props = { visible: boolean; items: MenuItem[]; onClose: () => void; title?:
 export function MenuSheet({ visible, items, onClose, title, anchor = 'top', dark }: Props) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
+  // Keep clear of the screen's bottom edge (and the gesture bar) so the last item is never cramped.
+  const topOffset = insets.top + 52;
+  const maxHeight = height - topOffset - insets.bottom - BOTTOM_MARGIN;
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close menu" />
       <View
         style={[
           styles.card,
-          anchor === 'top' ? { top: insets.top + 52 } : { bottom: insets.bottom + 84 },
+          anchor === 'top' ? { top: topOffset, maxHeight } : { bottom: insets.bottom + 100, maxHeight: height - insets.top - insets.bottom - 140 },
           { backgroundColor: dark ? '#2B1111' : theme.background, borderColor: dark ? 'rgba(255,255,255,0.15)' : theme.border },
         ]}>
+        <ScrollView bounces={false} showsVerticalScrollIndicator={false}>
         {title ? (
           <ThemedText type="smallBold" themeColor="textSecondary" style={styles.title}>
             {title}
@@ -59,10 +64,14 @@ export function MenuSheet({ visible, items, onClose, title, anchor = 'top', dark
             </Pressable>
           </View>
         ))}
+        </ScrollView>
       </View>
     </Modal>
   );
 }
+
+/** Space kept between a top-anchored menu and the bottom of the screen. */
+const BOTTOM_MARGIN = 32;
 
 const styles = StyleSheet.create({
   card: {
@@ -71,7 +80,8 @@ const styles = StyleSheet.create({
     minWidth: 240,
     borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    paddingVertical: 6,
+    paddingTop: 6,
+    paddingBottom: 14,
     shadowColor: '#000',
     shadowOpacity: 0.25,
     shadowRadius: 16,
