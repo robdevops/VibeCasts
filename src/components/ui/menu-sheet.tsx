@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -22,6 +23,8 @@ type Props = { visible: boolean; items: MenuItem[]; onClose: () => void; title?:
 /** Popover menu anchored to the top-right (default) or bottom-right of the screen. */
 export function MenuSheet({ visible, items, onClose, title, anchor = 'top', dark }: Props) {
   const theme = useTheme();
+  // Scrolling is only switched on when the rows really don't fit: a menu that fits must not wobble or scroll at all.
+  const [sizes, setSizes] = useState({ content: 0, view: 0 });
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   // Keep clear of the screen's bottom edge (and the gesture bar) so the last item is never cramped.
@@ -36,7 +39,13 @@ export function MenuSheet({ visible, items, onClose, title, anchor = 'top', dark
           anchor === 'top' ? { top: topOffset, maxHeight } : { bottom: insets.bottom + 100, maxHeight: height - insets.top - insets.bottom - 140 },
           { backgroundColor: dark ? '#1E1433' : theme.background, borderColor: dark ? 'rgba(255,255,255,0.15)' : theme.border },
         ]}>
-        <ScrollView bounces={false} showsVerticalScrollIndicator={false} style={styles.scroll} contentContainerStyle={styles.pad}>
+        <ScrollView
+          bounces={false}
+          overScrollMode="never"
+          scrollEnabled={sizes.content > sizes.view + 1}
+          onLayout={(e) => setSizes((z) => ({ ...z, view: e.nativeEvent.layout.height }))}
+          onContentSizeChange={(_w, h) => setSizes((z) => ({ ...z, content: h }))}
+          showsVerticalScrollIndicator={false} style={styles.scroll} contentContainerStyle={styles.pad}>
         {title ? (
           <ThemedText type="smallBold" themeColor="textSecondary" style={styles.title}>
             {title}
