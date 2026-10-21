@@ -144,6 +144,8 @@ export function TileGrid({
     visibleCb.current = onVisibleChange;
   });
   const lastRange = useRef({ start: -1, end: -1 });
+  // The rows at the top and bottom of the viewport at the last window update: nothing to work out until one of them changes.
+  const lastRows = useRef({ top: -1, bottom: -1 });
 
   const updateWindow = useCallback(
     (y: number) => {
@@ -257,6 +259,7 @@ export function TileGrid({
       dragStartLeft.set(rect.left);
       dragStartTop.set(rect.top);
       dragStartScroll.set(scrollNow.current);
+      scrollY.set(scrollNow.current);
       dragTx.set(0);
       dragTy.set(0);
       ghostSettling.set(false);
@@ -477,9 +480,17 @@ export function TileGrid({
         scrollEnabled={!dragging}
         scrollEventThrottle={16}
         onScroll={(e) => {
-          scrollNow.current = e.nativeEvent.contentOffset.y;
-          scrollY.set(scrollNow.current);
-          updateWindow(scrollNow.current);
+          const y = e.nativeEvent.contentOffset.y;
+          scrollNow.current = y;
+          // Only the dragged tile's ghost follows the scroll position on the UI thread, so it is only needed during a drag.
+          if (drag.current) scrollY.set(y);
+          const step = m.tile + m.gap;
+          if (step <= 0) return;
+          const top = Math.floor((y - m.pad) / step);
+          const bottom = Math.floor((y + (viewportH.current || windowHeight) - m.pad) / step);
+          if (top === lastRows.current.top && bottom === lastRows.current.bottom) return;
+          lastRows.current = { top, bottom };
+          updateWindow(y);
         }}
         refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} /> : undefined}
         contentContainerStyle={{ minHeight: height }}>

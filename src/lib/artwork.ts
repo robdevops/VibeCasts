@@ -4,7 +4,20 @@
  * for a 110 px tile. Other hosts are returned unchanged.
  */
 export function artworkSized(uri: string, px: number): string {
-  if (!/mzstatic\.com/i.test(uri)) return uri;
   const target = Math.max(100, Math.ceil(px / 100) * 100);
+  const memo = `${target}|${uri}`;
+  const hit = sizedCache.get(memo);
+  if (hit !== undefined) return hit;
+  const sized = resize(uri, target);
+  // Every tile asks on every render; the answer only depends on the pair. Bounded, oldest out first.
+  if (sizedCache.size >= 1500) sizedCache.delete(sizedCache.keys().next().value as string);
+  sizedCache.set(memo, sized);
+  return sized;
+}
+
+const sizedCache = new Map<string, string>();
+
+function resize(uri: string, target: number): string {
+  if (!/mzstatic\.com/i.test(uri)) return uri;
   return uri.replace(/\/\d+x\d+(bb|ss)?(-\d+)?\.(jpg|jpeg|png|webp)(\?.*)?$/i, (_m, mode = 'bb', q = '', ext, qs = '') => `/${target}x${target}${mode}${q}.${ext}${qs}`);
 }

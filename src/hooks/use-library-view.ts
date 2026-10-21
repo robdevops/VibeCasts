@@ -3,8 +3,12 @@ import { useMemo } from 'react';
 import type { Podcast } from '@/api/types';
 import { unplayedCount } from '@/lib/episode-state';
 import { tileKey } from '@/lib/layout';
-import { useFeeds } from '@/store/feeds';
+import { useFeeds, type FeedEntry } from '@/store/feeds';
 import { useLibrary } from '@/store/library';
+
+// A feed that lands replaces only its own entry, so the other shows' counts are reused: recounting every episode of
+// every show on each arrival is what made the grid stutter while a big library refreshed.
+const counted = new WeakMap<FeedEntry, { version: number; n: number }>();
 
 /** Derived, memoised views of the library for the Podcasts and folder screens. */
 export function useLibraryView() {
@@ -20,8 +24,14 @@ export function useLibraryView() {
     const unplayed: Record<string, number> = {};
     const latest: Record<string, number> = {};
     for (const id of Object.keys(subscriptions)) {
-      const eps = feeds[id]?.episodes ?? [];
-      unplayed[id] = unplayedCount(id, eps, states);
+      const entry = feeds[id];
+      const eps = entry?.episodes ?? [];
+      let hit = entry ? counted.get(entry) : undefined;
+      if (entry && (!hit || hit.version !== countsVersion)) {
+        hit = { version: countsVersion, n: unplayedCount(id, eps, states) };
+        counted.set(entry, hit);
+      }
+      unplayed[id] = hit?.n ?? 0;
       latest[id] = eps[0]?.published ?? 0;
     }
     const members = (folderId: string): Podcast[] =>
@@ -32,6 +42,5 @@ export function useLibraryView() {
       Math.max(0, ...(folderOrder[folderId] ?? []).map((id) => latest[id] ?? 0));
     return { subscriptions, folders, folderOrder, unplayed, latest, members, folderUnplayed, folderLatest, tileKey };
     // `countsVersion` stands in for the episode states (read above from the store).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subscriptions, folders, folderOrder, countsVersion, feeds]);
 }

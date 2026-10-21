@@ -10,6 +10,8 @@ import { createWriter } from '@/db/writer';
 
 /** Newest episodes kept per show in the persisted cache. */
 const MAX_CACHED = 20;
+/** Whole feeds (with show notes) kept in memory: the most recently fetched or opened few, not every show. */
+const MAX_FULL = 6;
 const STORAGE_KEY = 'feeds.v1';
 export const STALE_MS = 30 * 60 * 1000;
 
@@ -33,9 +35,9 @@ type Actions = {
   hydrate(): Promise<void>;
   remember(p: Podcast): void;
   /** Store an already-parsed feed (used when the feed was just fetched for another reason). */
-  ingest(podcast: Podcast, parsed: ParsedFeed, validators?: FeedValidators): void;
+  ingest(podcast: Podcast, parsed: ParsedFeed, validators?: FeedValidators, opts?: { keepFull?: boolean }): void;
   /** `conditional`: send the saved validators and skip the work if the feed hasn't changed (bulk and background refreshes). */
-  refresh(podcast: Podcast, opts?: { conditional?: boolean }): Promise<void>;
+  refresh(podcast: Podcast, opts?: { conditional?: boolean; keepFull?: boolean }): Promise<void>;
   /**
    * Refresh several feeds, 4 at a time, nearest the viewport first (see `setPriority`).
    * `whileLooking`: pause while nobody is looking at the library (phone locked, another tab) and carry on when they are.
@@ -118,17 +120,29 @@ export function createFeedStore(
       set({ hydrated: true });
     },
 
-    ingest(podcast, parsed, validators) {
+    ingest(podcast, parsed, validators, opts) {
       const sorted = parsed.episodes
         .map((e) => ({ ...e, podcastId: podcast.id }))
         .sort((a, b) => b.published - a.published);
-      set((s) => ({
-        feeds: {
-          ...s.feeds,
-          [podcast.id]: { fetchedAt: Date.now(), total: sorted.length, episodes: sorted.slice(0, MAX_CACHED), validators },
-        },
-        full: { ...s.full, [podcast.id]: { episodes: sorted, meta: parsed.podcast } },
-      }));
+      set((s) => {
+        const next: Partial<FeedData & Actions> = {
+          feeds: {
+            ...s.feeds,
+            [podcast.id]: { fetchedAt: Date.now(), total: sorted.length, episodes: sorted.slice(0, MAX_CACHED), validators },
+          },
+        };
+        // A bulk refresh (every show in the library) only needs the newest episodes for the badges: keep the whole feed,
+        // with its show notes, only for a few shows (one being opened, or already held and now refreshed).
+        if (opts?.keepFull !== false || s.full[podcast.id]) {
+          const full = { ...s.full };
+          delete full[podcast.id]; // re-insert last: Object keys keep insertion order, so the oldest are first
+          full[podcast.id] = { episodes: sorted, meta: parsed.podcast };
+          const ids = Object.keys(full);
+          for (const id of ids.slice(0, Math.max(0, ids.length - MAX_FULL))) delete full[id];
+          next.full = full;
+        }
+        return next;
+      });
       onMeta(podcast.id, parsed.podcast);
     },
 
@@ -138,7 +152,7 @@ export function createFeedStore(
       try {
         const res = await fetchText(podcast.feedUrl, opts?.conditional ? get().feeds[podcast.id]?.validators : undefined);
         const text = typeof res === 'string' ? res : res.text;
-        get().ingest(podcast, parseFeed(text), typeof res === 'string' ? undefined : res.validators);
+        get().ingest(podcast, parseFeed(text), typeof res === 'string' ? undefined : res.validators, { keepFull: opts?.keepFull });
       } catch (e) {
         if (e instanceof FeedNotModified) {
           // Nothing new: keep the cache, and count it as fresh so it isn't asked again right away.
@@ -174,7 +188,7 @@ export function createFeedStore(
           if (opts?.whileLooking && !get().looking) await new Promise<void>((resume) => lookWaiters.push(resume));
           const p = takeNext(pending);
           if (!p) return;
-          await get().refresh(p, { conditional: true });
+          await get().refresh(p, { conditional: true, keepFull: false });
         }
       };
       await Promise.all([worker(), worker(), worker(), worker()]);
@@ -191,7 +205,7 @@ export function createFeedStore(
           if (opts?.whileLooking && !get().looking) await new Promise<void>((resume) => lookWaiters.push(resume));
           const p = takeNext(pending);
           if (!p) return;
-          await get().refresh(p);
+          await get().refresh(p, { keepFull: false });
           set((s) => ({ backfillProgress: s.backfillProgress && { ...s.backfillProgress, done: s.backfillProgress.done + 1 } }));
           // Let the UI breathe between big XML parses.
           await new Promise((r) => setTimeout(r, 0));

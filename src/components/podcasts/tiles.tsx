@@ -16,10 +16,11 @@ const shadow = {
 
 export function PodcastTile({ podcast, unplayed, size }: { podcast: Podcast; unplayed: number; size: number }) {
   return (
-    <View style={{ width: size, height: size }} accessibilityLabel={podcast.title} accessibilityRole="button">
-      <Artwork uri={podcast.artwork} title={podcast.title} size={size} radius={8} style={shadow} />
+    // No wrapper view: the grid's cell is already this size, and the badge positions itself against it.
+    <>
+      <Artwork uri={podcast.artwork} title={podcast.title} size={size} radius={8} style={shadow} accessibilityLabel={podcast.title} accessibilityRole="button" />
       <Badge count={unplayed} />
-    </View>
+    </>
   );
 }
 

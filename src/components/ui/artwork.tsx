@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { PixelRatio, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { tileThumbPx, useThumb } from '@/artwork/thumbs';
@@ -14,10 +14,20 @@ function colorFor(seed: string) {
   return PALETTE[Math.abs(h) % PALETTE.length];
 }
 
-type Props = { uri?: string; title: string; size?: number; radius?: number; style?: StyleProp<ViewStyle> };
+type Props = {
+  uri?: string;
+  title: string;
+  size?: number;
+  radius?: number;
+  style?: StyleProp<ViewStyle>;
+  accessibilityLabel?: string;
+  accessibilityRole?: 'button';
+};
 
 /** Square podcast artwork with a coloured initial as the fallback. */
-export function Artwork({ uri, title, size, radius = 10, style }: Props) {
+export function Artwork({ uri, title, size, radius = 10, style, accessibilityLabel, accessibilityRole }: Props) {
+  // The placeholder letter is only needed until the picture is there.
+  const [loaded, setLoaded] = useState(false);
   // Tiles fill their column (no fixed size): ~110 pt on a phone.
   const wantPx = (size ?? 120) * PixelRatio.get();
   const full = uri ? artworkSized(uri, wantPx) : undefined;
@@ -31,22 +41,27 @@ export function Artwork({ uri, title, size, radius = 10, style }: Props) {
   const imageSource = useMemo(() => ({ uri: source }), [source]);
   const dim = size ? { width: size, height: size } : { width: '100%' as const, aspectRatio: 1 };
   return (
-    <View style={[styles.box, dim, { borderRadius: radius, backgroundColor: colorFor(title) }, style]}>
-      {known ? null : <Text style={[styles.initial, { fontSize: size ? size * 0.4 : 36 }]}>{title.trim().charAt(0).toUpperCase()}</Text>}
+    <View
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole={accessibilityRole}
+      style={[styles.box, dim, { borderRadius: radius, backgroundColor: colorFor(title) }, style]}>
+      {known || loaded ? null : <Text style={[styles.initial, { fontSize: size ? size * 0.4 : 36 }]}>{title.trim().charAt(0).toUpperCase()}</Text>}
       {uri ? (
         // Non-interactive so taps/drags reach the tile, and web doesn't start a native image drag.
-        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-          <Image
-            source={imageSource}
-            cachePolicy="memory-disk"
-            recyclingKey={source}
-            style={StyleSheet.absoluteFill}
-            contentFit="cover"
-            transition={known ? 0 : 150}
-            onLoad={() => source && markShown(source)}
-            accessibilityIgnoresInvertColors
-          />
-        </View>
+        <Image
+          source={imageSource}
+          cachePolicy="memory-disk"
+          recyclingKey={source}
+          pointerEvents="none"
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          transition={known ? 0 : 150}
+          onLoad={() => {
+            if (source) markShown(source);
+            setLoaded(true);
+          }}
+          accessibilityIgnoresInvertColors
+        />
       ) : null}
     </View>
   );

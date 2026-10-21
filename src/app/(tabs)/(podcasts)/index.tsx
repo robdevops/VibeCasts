@@ -13,6 +13,7 @@ import { NamePrompt } from '@/components/ui/name-prompt';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { useAppActive } from '@/hooks/use-app-active';
 import { useLibraryView } from '@/hooks/use-library-view';
+import { useStableList } from '@/hooks/use-stable-list';
 import { useTheme } from '@/hooks/use-theme';
 import { displayOrder } from '@/lib/display-order';
 import { parseKey } from '@/lib/layout';
@@ -70,7 +71,7 @@ export default function PodcastsScreen() {
   // A search result being dragged: the grid shows the whole library so it can be placed anywhere.
   const [dragFromSearch, setDragFromSearch] = useState<string | null>(null);
 
-  const mainKeys = useMemo(() => {
+  const sortedKeys = useMemo(() => {
     // Skip keys that no longer point at a show or folder (they would leave an empty slot).
     const known = homeOrder.filter((key) => {
       const { type, id } = parseKey(key);
@@ -87,6 +88,8 @@ export default function PodcastsScreen() {
     });
     return sortTiles(tiles, sort);
   }, [homeOrder, sort, view]);
+  // Most feed arrivals change nothing about the order: keep the same array so the grid is left alone.
+  const mainKeys = useStableList(sortedKeys) as string[];
 
   const searchKeys = useMemo(
     () =>

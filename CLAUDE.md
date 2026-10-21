@@ -83,6 +83,7 @@ Vertical lists spread `ELASTIC_SCROLL` (`constants/scroll.ts`: `overScrollMode: 
 - Persisted stores write through `db/writer.ts` (`createWriter`): bursts are coalesced, progress-only library changes wait 2.5 s, the feed cache 3 s, and `flushAllWrites()` runs when the app leaves the foreground (root `_layout`). Don't write storage directly from a store subscription.
 - Bulk and background feed refreshes are conditional (`refresh(podcast, { conditional: true })`): the saved ETag / Last-Modified is sent and a 304 (`FeedNotModified`) keeps the cache and just resets its age. Opening a page, pull to refresh and the notes fetch always do a full fetch (they need the whole feed in memory). Native only; web goes through the proxy.
 - `library.countsVersion` changes only when played/archived does, so the Podcasts grid's unplayed counts (`useLibraryView`) don't recompute on every progress save. While backgrounded, playback progress is saved every 20 s instead of 5 s.
+- Whole feeds (with show notes) are held in memory (`feeds.full`) for only the 6 most recently fetched or opened shows; bulk refreshes and backfills pass `keepFull: false` and keep just the newest 20 episodes. `useLibraryView` caches each show's unplayed count per feed entry (a landed feed recounts only its own show), and the Podcasts screen passes its sorted keys through `useStableList` so an unchanged order doesn't reach the grid.
 - The Podcasts grid shows `TileSkeleton` until the library has loaded, never "No podcasts yet".
 
 ## Library search, drag from results, visible-first loading

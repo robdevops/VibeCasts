@@ -200,3 +200,29 @@ describe('visible-first refresh', () => {
     await done;
   });
 });
+
+describe('whole feeds in memory', () => {
+  const show = (n: number) => ({ ...pod, id: String(n), feedUrl: `https://f${n}.example/rss` });
+
+  it('a bulk refresh keeps only the newest episodes, not the whole feed', async () => {
+    const s = createFeedStore(createMemoryKV(), jest.fn(async () => sampleFeed));
+    await s.getState().refreshAll([show(1), show(2)]);
+    expect(Object.keys(s.getState().feeds)).toEqual(['1', '2']);
+    expect(s.getState().full).toEqual({});
+  });
+
+  it('a show that is already held in full stays fresh through a bulk refresh', async () => {
+    const s = createFeedStore(createMemoryKV(), jest.fn(async () => sampleFeed));
+    await s.getState().refresh(show(1));
+    expect(s.getState().full['1']).toBeDefined();
+    await s.getState().refreshAll([show(1)]);
+    expect(s.getState().full['1']).toBeDefined();
+  });
+
+  it('holds at most a few whole feeds, dropping the oldest', async () => {
+    const s = createFeedStore(createMemoryKV(), jest.fn(async () => sampleFeed));
+    for (let n = 1; n <= 9; n++) await s.getState().refresh(show(n));
+    expect(Object.keys(s.getState().full)).toEqual(['4', '5', '6', '7', '8', '9']);
+    expect(Object.keys(s.getState().feeds)).toHaveLength(9);
+  });
+});

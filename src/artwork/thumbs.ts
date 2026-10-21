@@ -1,7 +1,7 @@
 import { Directory, File, Paths } from 'expo-file-system';
 import { Image } from 'expo-image';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
-import { useSyncExternalStore } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
 import { Dimensions, PixelRatio, Platform } from 'react-native';
 
 import { artworkSized } from '@/lib/artwork';
@@ -15,12 +15,22 @@ import { metricsFor } from '@/lib/grid';
 export const thumbsSupported = Platform.OS !== 'web';
 
 /** The size tiles ask for, rounded up to 100 px (same rule as `artworkSized`). */
-export const tileThumbPx = (): number => Math.max(100, Math.ceil((metricsFor(Dimensions.get('window').width).tile * PixelRatio.get()) / 100) * 100);
+let thumbPx: { width: number; ratio: number; px: number } | undefined;
+export const tileThumbPx = (): number => {
+  // Every tile asks on every render: work it out once per window size.
+  const width = Dimensions.get('window').width;
+  const ratio = PixelRatio.get();
+  if (!thumbPx || thumbPx.width !== width || thumbPx.ratio !== ratio) {
+    thumbPx = { width, ratio, px: Math.max(100, Math.ceil((metricsFor(width).tile * ratio) / 100) * 100) };
+  }
+  return thumbPx.px;
+};
 
 /** True when the host can already be resized by editing the URL. */
 export const resizableByUrl = (uri: string): boolean => artworkSized(uri, 100) !== uri;
 
 const made = new Map<string, string>(); // source url -> thumbnail file uri
+let onDisk: Set<string> | undefined; // names of the files in the thumbnails folder, read once (no file check per tile)
 const missing = new Set<string>(); // checked on disk, not there (cleared when one is made)
 const listeners = new Map<string, Set<() => void>>();
 let cachedDir: Directory | undefined;
@@ -40,8 +50,10 @@ export function thumbFor(url: string | undefined, px: number): string | undefine
   if (known) return known;
   if (missing.has(id)) return undefined;
   try {
-    const file = new File(dirOf(), nameFor(url, px));
-    if (file.exists) {
+    const name = nameFor(url, px);
+    onDisk ??= new Set(dirOf().exists ? dirOf().list().map((f) => f.name) : []);
+    if (onDisk.has(name)) {
+      const file = new File(dirOf(), name);
       made.set(id, file.uri);
       return file.uri;
     }
@@ -64,11 +76,9 @@ function subscribe(id: string, cb: () => void) {
 /** The tile-sized copy of `url` (re-renders when it appears); undefined when there is none or the host resizes by URL. */
 export function useThumb(url: string | undefined, px: number): string | undefined {
   const wanted = url && thumbsSupported && !resizableByUrl(url) ? url : undefined;
-  return useSyncExternalStore(
-    (cb) => (wanted ? subscribe(`${px}|${wanted}`, cb) : () => {}),
-    () => thumbFor(wanted, px),
-    () => undefined,
-  );
+  // A new `subscribe` function makes React unsubscribe and subscribe again, so keep it the same while nothing changes.
+  const sub = useCallback((cb: () => void) => (wanted ? subscribe(`${px}|${wanted}`, cb) : () => {}), [wanted, px]);
+  return useSyncExternalStore(sub, () => thumbFor(wanted, px), () => undefined);
 }
 
 async function localCopy(url: string, px: number): Promise<{ file: File; temporary: boolean } | undefined> {
@@ -99,6 +109,7 @@ async function makeOne(url: string, px: number): Promise<void> {
     new File(saved.uri).move(dest);
     const id = `${px}|${url}`;
     made.set(id, dest.uri);
+    onDisk?.add(dest.name);
     missing.delete(id);
     listeners.get(id)?.forEach((cb) => cb());
   } catch {
