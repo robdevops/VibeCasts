@@ -235,7 +235,7 @@ export default function PodcastsScreen() {
     checked: s === sort,
     onPress: () => setSort(s),
   })).concat({
-    label: 'Auto categorize into folders',
+    label: 'Auto categorize',
     icon: 'create-new-folder',
     separator: true,
     disabled: searching,

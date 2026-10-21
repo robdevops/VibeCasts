@@ -23,7 +23,7 @@ type Props = { visible: boolean; items: MenuItem[]; onClose: () => void; title?:
 export function MenuSheet({ visible, items, onClose, title, anchor = 'top', dark, roomy }: Props) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { height, width } = useWindowDimensions();
+  const { height } = useWindowDimensions();
   // Keep clear of the screen's bottom edge (and the gesture bar) so the last item is never cramped.
   const topOffset = insets.top + 52;
   const maxHeight = height - topOffset - insets.bottom - BOTTOM_MARGIN;
@@ -34,9 +34,6 @@ export function MenuSheet({ visible, items, onClose, title, anchor = 'top', dark
         style={[
           styles.card,
           anchor === 'top' ? { top: topOffset, maxHeight } : { bottom: insets.bottom + 100, maxHeight: height - insets.top - insets.bottom - 140 },
-          // A fixed width for the roomy menus: left to size itself, long labels wrapped onto a second line the card's
-          // height had not allowed for, and the last row was cut off.
-          roomy ? { width: Math.min(width - 24, 330) } : null,
           { backgroundColor: dark ? '#1E1433' : theme.background, borderColor: dark ? 'rgba(255,255,255,0.15)' : theme.border },
         ]}>
         <ScrollView bounces={false} showsVerticalScrollIndicator={false} style={styles.scroll} contentContainerStyle={roomy ? styles.padRoomy : styles.pad}>
