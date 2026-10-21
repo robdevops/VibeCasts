@@ -556,7 +556,8 @@ const styles = StyleSheet.create({
   times: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 4 },
   time: { color: MUTED },
   center: { textAlign: 'center' },
-  controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingTop: 2, paddingBottom: 24 },
+  // Centred between the seek bar's line and the bottom bar: the gap above (half the slider + the times) equals the padding below.
+  controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingTop: 2, paddingBottom: 38 },
   bigPlayBox: { width: 92, height: 92 },
   bigPlay: { width: 92, height: 92, borderRadius: 46, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   bar: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 18, paddingVertical: 10 },
