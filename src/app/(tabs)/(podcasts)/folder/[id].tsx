@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { EmptyLibrary } from '@/components/podcasts/empty-library';
@@ -31,6 +31,14 @@ export default function FolderScreen() {
     await useFeeds.getState().refreshAll((order ?? []).flatMap((p) => (subscriptions[p] ? [subscriptions[p].podcast] : [])));
     setRefreshing(false);
   }, [order, subscriptions]);
+
+  // The last show left (or the folder was deleted): the page has nothing to show, so it closes by itself.
+  const gone = !folder;
+  useEffect(() => {
+    if (!gone) return;
+    if (router.canGoBack()) router.back();
+    else router.replace('/(tabs)/(podcasts)');
+  }, [gone]);
 
   if (!folder) {
     return (
@@ -81,8 +89,7 @@ export default function FolderScreen() {
               setMenu(false);
               // An empty folder has nothing to lose: delete it without asking.
               if (keys.length === 0 || (await confirmAsync('Delete folder?', `Delete ${folder.name}? Its podcasts go back to the main grid.`, 'Delete'))) {
-                useLibrary.getState().deleteFolder(id);
-                router.back();
+                useLibrary.getState().deleteFolder(id); // the page closes itself once the folder is gone
               }
             },
           },

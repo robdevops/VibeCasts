@@ -82,6 +82,18 @@ type Actions = {
   setSort(s: PodcastSort): void;
 };
 
+/**
+ * A folder whose last show has just left is removed (a folder that was already empty, such as a new one, is not
+ * touched: the caller only passes the folder a member was taken out of). Edits the given copies in place.
+ */
+function dropIfEmpty(folderId: string | undefined, folders: Record<string, Folder>, folderOrder: Record<string, string[]>, homeOrder: string[]): string[] {
+  if (!folderId || !folders[folderId] || (folderOrder[folderId] ?? []).length > 0) return homeOrder;
+  delete folders[folderId];
+  delete folderOrder[folderId];
+  const key = tileKey({ type: 'folder', id: folderId });
+  return homeOrder.filter((k) => k !== key);
+}
+
 /** Stamp the moment an episode becomes played (auto archive counts from it). */
 function withPlayedAt(prev: EpisodeState, patch: Partial<EpisodeState>): Partial<EpisodeState> {
   if (patch.played === true && !prev.played && patch.playedAt === undefined) return { ...patch, playedAt: Date.now() };
@@ -201,11 +213,13 @@ export function createLibraryStore(storage: KV = kv) {
       const key = tileKey({ type: 'podcast', id });
       set((s) => {
         const { [id]: removed, ...subscriptions } = s.subscriptions;
+        const folders = { ...s.folders };
         const folderOrder = { ...s.folderOrder };
         if (removed?.folderId) {
           folderOrder[removed.folderId] = (folderOrder[removed.folderId] ?? []).filter((x) => x !== id);
         }
-        return { subscriptions, folderOrder, homeOrder: s.homeOrder.filter((k) => k !== key) };
+        const homeOrder = dropIfEmpty(removed?.folderId, folders, folderOrder, s.homeOrder.filter((k) => k !== key));
+        return { subscriptions, folders, folderOrder, homeOrder };
       });
     },
 
@@ -242,14 +256,12 @@ export function createLibraryStore(storage: KV = kv) {
       set((s) => {
         const sub = s.subscriptions[podcastId];
         if (!sub || !s.folders[folderId] || sub.folderId === folderId) return s;
+        const folders = { ...s.folders };
         const folderOrder = { ...s.folderOrder };
         if (sub.folderId) folderOrder[sub.folderId] = folderOrder[sub.folderId].filter((x) => x !== podcastId);
         folderOrder[folderId] = [...(folderOrder[folderId] ?? []), podcastId];
-        return {
-          subscriptions: { ...s.subscriptions, [podcastId]: { ...sub, folderId } },
-          folderOrder,
-          homeOrder: s.homeOrder.filter((k) => k !== tileKey({ type: 'podcast', id: podcastId })),
-        };
+        const homeOrder = dropIfEmpty(sub.folderId, folders, folderOrder, s.homeOrder.filter((k) => k !== tileKey({ type: 'podcast', id: podcastId })));
+        return { subscriptions: { ...s.subscriptions, [podcastId]: { ...sub, folderId } }, folders, folderOrder, homeOrder };
       });
     },
 
@@ -288,15 +300,13 @@ export function createLibraryStore(storage: KV = kv) {
       set((s) => {
         const sub = s.subscriptions[podcastId];
         if (!sub?.folderId) return s;
+        const folders = { ...s.folders };
         const folderOrder = {
           ...s.folderOrder,
           [sub.folderId]: s.folderOrder[sub.folderId].filter((x) => x !== podcastId),
         };
-        return {
-          subscriptions: { ...s.subscriptions, [podcastId]: { ...sub, folderId: undefined } },
-          folderOrder,
-          homeOrder: [...s.homeOrder, tileKey({ type: 'podcast', id: podcastId })],
-        };
+        const homeOrder = dropIfEmpty(sub.folderId, folders, folderOrder, [...s.homeOrder, tileKey({ type: 'podcast', id: podcastId })]);
+        return { subscriptions: { ...s.subscriptions, [podcastId]: { ...sub, folderId: undefined } }, folders, folderOrder, homeOrder };
       });
     },
 
@@ -305,15 +315,20 @@ export function createLibraryStore(storage: KV = kv) {
     placeInHome(keys) {
       set((s) => {
         const subscriptions = { ...s.subscriptions };
+        const folders = { ...s.folders };
         const folderOrder = { ...s.folderOrder };
+        const left = new Set<string>();
         for (const key of keys) {
           const { type, id } = parseKey(key);
           const sub = type === 'podcast' ? subscriptions[id] : undefined;
           if (!sub?.folderId) continue;
           folderOrder[sub.folderId] = (folderOrder[sub.folderId] ?? []).filter((x) => x !== id);
+          left.add(sub.folderId);
           subscriptions[id] = { ...sub, folderId: undefined };
         }
-        return { subscriptions, folderOrder, homeOrder: keys, sort: 'custom' };
+        let homeOrder = keys;
+        for (const folderId of left) homeOrder = dropIfEmpty(folderId, folders, folderOrder, homeOrder);
+        return { subscriptions, folders, folderOrder, homeOrder, sort: 'custom' };
       });
     },
     setFolderOrder: (folderId, ids) => set((s) => ({ folderOrder: { ...s.folderOrder, [folderId]: ids } })),

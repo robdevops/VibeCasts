@@ -88,7 +88,8 @@ Vertical lists spread `ELASTIC_SCROLL` (`constants/scroll.ts`: `overScrollMode: 
 
 ## Auto categorize
 - Sort by menu > "Auto categorize into folders" (`autoCategorize` in `(podcasts)/index.tsx`): fetches the feeds of loose shows with no category (`feeds.backfill` with `need` / `label`), plans with `lib/auto-categorize.ts` (`planCategories`: loose shows only, a new folder needs 2+ shows, a folder with the same name is reused, case-insensitive), asks to confirm, then `library.applyCategories` files them in one update (new folders at the top). Categories are per show (`Podcast.category`: iTunes genre or the feed's first `itunes:category`), not per episode.
-- `MenuSheet` takes `roomy` (about 20% taller) for the two Podcasts menus.
+- `MenuSheet` takes `roomy` (about 40% taller, fixed width up to 330 so long labels don't wrap) for the two Podcasts menus; its padding lives inside the scroller so the card's height is exactly its content's.
+- A folder is deleted when its last show leaves it (`dropIfEmpty` in `store/library.ts`, used by `removeFromFolder`, `unsubscribe`, `moveToFolder`, `placeInHome`); a new or already-empty folder stays. The folder page closes itself when its folder is gone.
 
 ## Library search, drag from results, visible-first loading
 - Library search is `lib/search.ts` (`searchPodcasts`): a query matches at the start of a word in the title or author ("me" finds Metaverse, not Games).

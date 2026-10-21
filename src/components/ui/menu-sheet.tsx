@@ -23,7 +23,7 @@ type Props = { visible: boolean; items: MenuItem[]; onClose: () => void; title?:
 export function MenuSheet({ visible, items, onClose, title, anchor = 'top', dark, roomy }: Props) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { height } = useWindowDimensions();
+  const { height, width } = useWindowDimensions();
   // Keep clear of the screen's bottom edge (and the gesture bar) so the last item is never cramped.
   const topOffset = insets.top + 52;
   const maxHeight = height - topOffset - insets.bottom - BOTTOM_MARGIN;
@@ -34,10 +34,12 @@ export function MenuSheet({ visible, items, onClose, title, anchor = 'top', dark
         style={[
           styles.card,
           anchor === 'top' ? { top: topOffset, maxHeight } : { bottom: insets.bottom + 100, maxHeight: height - insets.top - insets.bottom - 140 },
-          roomy ? styles.cardRoomy : null,
+          // A fixed width for the roomy menus: left to size itself, long labels wrapped onto a second line the card's
+          // height had not allowed for, and the last row was cut off.
+          roomy ? { width: Math.min(width - 24, 330) } : null,
           { backgroundColor: dark ? '#1E1433' : theme.background, borderColor: dark ? 'rgba(255,255,255,0.15)' : theme.border },
         ]}>
-        <ScrollView bounces={false} showsVerticalScrollIndicator={false}>
+        <ScrollView bounces={false} showsVerticalScrollIndicator={false} style={styles.scroll} contentContainerStyle={roomy ? styles.padRoomy : styles.pad}>
         {title ? (
           <ThemedText type="smallBold" themeColor="textSecondary" style={styles.title}>
             {title}
@@ -82,17 +84,18 @@ const styles = StyleSheet.create({
     minWidth: 240,
     borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    paddingTop: 6,
-    paddingBottom: 14,
     shadowColor: '#000',
     shadowOpacity: 0.25,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 6 },
     elevation: 12,
   },
-  // About 20% taller for a short menu: more air above, below and between the rows.
-  cardRoomy: { paddingTop: 9, paddingBottom: 18 },
-  itemRoomy: { paddingVertical: 16 },
+  // A short menu with generous air: about 40% taller than the plain one (3 rows: 164 px to about 230 px). Tune here.
+  padRoomy: { paddingTop: 14, paddingBottom: 24 },
+  pad: { paddingTop: 6, paddingBottom: 14 },
+  // Padding lives inside the scroller so the card's height is exactly its content's.
+  scroll: { flexGrow: 0 },
+  itemRoomy: { paddingVertical: 20 },
   title: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 },
   item: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, gap: 12 },
   iconSlot: { width: 22 },

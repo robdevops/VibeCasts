@@ -19,8 +19,9 @@ describe('library store', () => {
     expect(s.getState().homeOrder).toEqual([`f:${f}`, 'p:2']);
     expect(s.getState().folderOrder[f]).toEqual(['1']);
 
-    s.getState().removeFromFolder('1');
-    expect(s.getState().homeOrder).toEqual([`f:${f}`, 'p:2', 'p:1']);
+    s.getState().removeFromFolder('1'); // the last show: the folder goes with it
+    expect(s.getState().homeOrder).toEqual(['p:2', 'p:1']);
+    expect(s.getState().folders[f]).toBeUndefined();
     expect(s.getState().subscriptions['1'].folderId).toBeUndefined();
   });
 
@@ -39,8 +40,10 @@ describe('library store', () => {
     s.getState().subscribe(pod('1'));
     const f = s.getState().createFolder('X', '#000');
     s.getState().moveToFolder('1', f);
+    s.getState().subscribe(pod('2'));
+    s.getState().moveToFolder('2', f);
     s.getState().unsubscribe('1');
-    expect(s.getState().folderOrder[f]).toEqual([]);
+    expect(s.getState().folderOrder[f]).toEqual(['2']);
   });
 
   it('tracks episode state and persists across hydrate', async () => {
@@ -157,9 +160,9 @@ describe('placeInHome (dragging a podcast out of a folder, or up from search, in
     expect(s.getState().homeOrder).toEqual([`f:${f}`, 'p:1', 'p:3']);
 
     s.getState().placeInHome(['p:1', 'p:2', 'p:3', `f:${f}`]);
-    expect(s.getState().homeOrder).toEqual(['p:1', 'p:2', 'p:3', `f:${f}`]);
+    expect(s.getState().homeOrder).toEqual(['p:1', 'p:2', 'p:3']); // 2 was the folder's last show
     expect(s.getState().subscriptions['2'].folderId).toBeUndefined();
-    expect(s.getState().folderOrder[f]).toEqual([]);
+    expect(s.getState().folders[f]).toBeUndefined();
     expect(s.getState().sort).toBe('custom');
   });
 
@@ -207,5 +210,57 @@ describe('applyCategories', () => {
     s.getState().applyCategories([{ name: 'X', podcastIds: ['nope'] }]);
     expect(s.getState().homeOrder).toBe(before);
     expect(Object.keys(s.getState().folders)).toHaveLength(0);
+  });
+});
+
+describe('a folder goes when its last show leaves', () => {
+  const setup = () => {
+    const s = createLibraryStore(createMemoryKV());
+    for (const id of ['1', '2', '3']) s.getState().subscribe(pod(id));
+    const f = s.getState().createFolder('F', '#fff');
+    s.getState().moveToFolder('1', f);
+    return { s, f };
+  };
+  const gone = (s: ReturnType<typeof setup>['s'], f: string) =>
+    s.getState().folders[f] === undefined && s.getState().folderOrder[f] === undefined && !s.getState().homeOrder.includes(`f:${f}`);
+
+  it('removeFromFolder', () => {
+    const { s, f } = setup();
+    s.getState().removeFromFolder('1');
+    expect(gone(s, f)).toBe(true);
+    expect(s.getState().homeOrder).toContain('p:1');
+    expect(s.getState().subscriptions['1'].folderId).toBeUndefined();
+  });
+
+  it('unsubscribing it', () => {
+    const { s, f } = setup();
+    s.getState().unsubscribe('1');
+    expect(gone(s, f)).toBe(true);
+  });
+
+  it('moving it to another folder', () => {
+    const { s, f } = setup();
+    const g = s.getState().createFolder('G', '#000');
+    s.getState().moveToFolder('1', g);
+    expect(gone(s, f)).toBe(true);
+    expect(s.getState().folderOrder[g]).toEqual(['1']);
+  });
+
+  it('placing it in the home grid', () => {
+    const { s, f } = setup();
+    s.getState().placeInHome(['p:1', 'p:2', 'p:3', `f:${f}`]);
+    expect(gone(s, f)).toBe(true);
+    expect(s.getState().homeOrder).toEqual(['p:1', 'p:2', 'p:3']);
+  });
+
+  it('keeps a folder that still has shows, a new empty folder, and an already empty one', () => {
+    const { s, f } = setup();
+    s.getState().moveToFolder('2', f);
+    s.getState().removeFromFolder('1');
+    expect(s.getState().folders[f]).toBeDefined();
+    expect(s.getState().folderOrder[f]).toEqual(['2']);
+    const empty = s.getState().createFolder('Empty', '#000');
+    s.getState().unsubscribe('3'); // a loose show: no folder involved
+    expect(s.getState().folders[empty]).toBeDefined();
   });
 });
