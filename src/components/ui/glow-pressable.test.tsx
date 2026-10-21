@@ -16,7 +16,7 @@ jest.mock('react-native-reanimated', () => {
     useSharedValue: value,
     useAnimatedStyle: (fn: () => object) => fn(),
     withTiming: (n: number) => n,
-    withSpring: (n: number) => n,
+    Easing: { out: (f: unknown) => f, cubic: 0, quad: 0 },
     withSequence: (...n: number[]) => n[n.length - 1],
   };
 });

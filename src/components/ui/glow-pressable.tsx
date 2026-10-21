@@ -1,6 +1,9 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, type PressableProps, type StyleProp, type ViewStyle } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
+
+/** Every effect is over within this long (springs were left out: they wobble for much longer than they look like they should). */
+export const EFFECT_MS = 1000;
 
 type Props = Omit<PressableProps, 'style' | 'children'> & {
   children: ReactNode;
@@ -40,15 +43,15 @@ export function GlowPressable({ children, style, glowColor, glowSize, pressedSca
         onPressIn?.(e);
       }}
       onPressOut={(e) => {
-        held.set(withSpring(0, { damping: 9, stiffness: 260 }));
+        held.set(withTiming(0, { duration: 200, easing: Easing.out(Easing.cubic) }));
         onPressOut?.(e);
       }}
       onPress={(e) => {
         glow.set(0);
-        glow.set(withSequence(withTiming(1, { duration: 90 }), withTiming(0, { duration: 460 })));
+        glow.set(withSequence(withTiming(1, { duration: 100 }), withTiming(0, { duration: EFFECT_MS - 100, easing: Easing.out(Easing.quad) })));
         if (tiltDeg) {
           tilt.set(0);
-          tilt.set(withSequence(withTiming(1, { duration: 110 }), withSpring(0, { damping: 6, stiffness: 220 })));
+          tilt.set(withSequence(withTiming(1, { duration: 120 }), withTiming(0, { duration: 480, easing: Easing.out(Easing.cubic) })));
         }
         onPress?.(e);
       }}
