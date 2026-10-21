@@ -54,6 +54,7 @@ function useViewedEpisode(podcastId?: string, episodeId?: string) {
   const known = useFeeds((s) => (podcastId ? s.known[podcastId] : undefined));
   const subscribed = useLibrary((s) => (podcastId ? s.subscriptions[podcastId]?.podcast : undefined));
   const feedLoading = useFeeds((s) => (podcastId ? !!s.loading[podcastId] : false));
+  useEffect(() => (podcastId ? useFeeds.getState().pinFull(podcastId) : undefined), [podcastId]); // not evicted while shown
 
   const viewed = useMemo<{ podcast: Podcast; episode: Episode } | null>(() => {
     if (!podcastId || !episodeId) return null;

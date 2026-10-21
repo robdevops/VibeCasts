@@ -1,4 +1,4 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -33,12 +33,18 @@ export default function FolderScreen() {
   }, [order, subscriptions]);
 
   // The last show left (or the folder was deleted): the page has nothing to show, so it closes by itself.
-  const gone = !folder;
+  // Only when this page is the one showing (`router.back()` closes whatever is on top, which could be a show opened from here)
+  // and only once the library has loaded (before that every folder looks missing, e.g. on a cold open or deep link).
+  const hydrated = useLibrary((s) => s.hydrated);
+  const focused = useIsFocused();
+  const gone = hydrated && !folder;
   useEffect(() => {
-    if (!gone) return;
+    if (!gone || !focused) return;
     if (router.canGoBack()) router.back();
     else router.replace('/(tabs)/(podcasts)');
-  }, [gone]);
+  }, [gone, focused]);
+
+  if (!folder && !hydrated) return <ThemedView style={styles.fill} />; // the library is still loading
 
   if (!folder) {
     return (

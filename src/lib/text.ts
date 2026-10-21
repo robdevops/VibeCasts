@@ -13,3 +13,6 @@ export function stripHtml(html: string | null | undefined): string {
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
+
+/** "1 podcast", "2 podcasts" (or a given plural). */
+export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;

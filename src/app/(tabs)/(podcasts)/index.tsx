@@ -23,8 +23,10 @@ import { ensureThumbs } from '@/artwork/thumbs';
 import { prefetchTileArtwork } from '@/lib/prefetch-artwork';
 import { searchPodcasts } from '@/lib/search';
 import { SORT_LABELS, sortTiles, type PodcastSort, type SortableTile } from '@/lib/podcast-sort';
+import { plural } from '@/lib/text';
 import { useFeeds } from '@/store/feeds';
 import { useLibrary } from '@/store/library';
+import { useToast } from '@/store/toast';
 
 export default function PodcastsScreen() {
   const theme = useTheme();
@@ -187,21 +189,31 @@ export default function PodcastsScreen() {
   // File the loose shows into folders named after their category. Shows with no category known yet are fetched first.
   const autoCategorize = async () => {
     setMenu(null);
-    const loosePodcasts = () =>
-      Object.values(useLibrary.getState().subscriptions)
-        .filter((s) => !s.folderId)
-        .map((s) => s.podcast);
-    await useFeeds.getState().backfill(loosePodcasts(), { need: (p) => !p.category, label: 'Finding categories' });
+    // A fetch of details already running (an import's, say) would make `backfill` below return at once: wait for it.
+    await useFeeds.getState().backfillIdle();
+    // The loose shows in grid order, so each new folder lists its shows (and shows its four pictures) as the grid does.
+    const loosePodcasts = () => {
+      const { homeOrder, subscriptions } = useLibrary.getState();
+      return homeOrder.flatMap((key) => {
+        const { type, id } = parseKey(key);
+        const sub = type === 'podcast' ? subscriptions[id] : undefined;
+        return sub && !sub.folderId ? [sub.podcast] : [];
+      });
+    };
+    // A feed that has been fetched and still has no category simply doesn't declare one: don't fetch it again.
+    const fetched = (id: string) => !!useFeeds.getState().feeds[id];
+    await useFeeds.getState().backfill(loosePodcasts(), { need: (p) => !p.category && !fetched(p.id), label: 'Finding categories' });
     const plan = planCategories(loosePodcasts(), Object.values(useLibrary.getState().folders));
     if (!plan.groups.length) {
-      await confirmAsync('Nothing to sort', 'No loose podcasts share a category yet.', 'OK');
+      useToast.getState().show('No loose podcasts share a category yet');
       return;
     }
     const made = plan.groups.filter((g) => !g.folderId).length;
     const ok = await confirmAsync(
       'Sort into folders?',
-      `${plan.moved} podcasts go into ${plan.groups.length} folders (${made} new). ${plan.leftLoose} stay on the grid.`,
+      `${plural(plan.moved, 'podcast')} will go into ${plural(plan.groups.length, 'folder')} (${made} new). ${plan.leftLoose} will stay on the grid.`,
       'Sort',
+      false,
     );
     if (ok) useLibrary.getState().applyCategories(plan.groups);
   };
@@ -228,7 +240,7 @@ export default function PodcastsScreen() {
 
   const sortItems: MenuItem[] = [
     ...(Object.keys(SORT_LABELS) as PodcastSort[]).map((s) => ({ label: SORT_LABELS[s], checked: s === sort, onPress: () => setSort(s) })),
-    { label: 'Auto categorize', icon: 'create-new-folder', separator: true, disabled: searching, onPress: () => void autoCategorize() },
+    { label: 'Auto categorize', icon: 'create-new-folder', separator: true, disabled: searching || !!progress, onPress: () => void autoCategorize() },
   ];
 
   const headerRight =

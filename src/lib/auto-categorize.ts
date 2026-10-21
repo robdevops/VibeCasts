@@ -1,3 +1,5 @@
+import { folderIdsByName, folderKey } from './folder-name';
+
 export type CategoryGroup = { name: string; folderId?: string; podcastIds: string[] };
 export type CategoryPlan = { groups: CategoryGroup[]; leftLoose: number; moved: number };
 
@@ -11,16 +13,12 @@ const tidy = (s: string | undefined) => (s ?? '').replace(/\s+/g, ' ').trim();
  * stay loose. Biggest groups first, then by name.
  */
 export function planCategories(loose: Candidate[], folders: { id: string; name: string }[], minGroup = 2): CategoryPlan {
-  const folderByName = new Map<string, string>();
-  for (const f of folders) {
-    const key = tidy(f.name).toLowerCase();
-    if (key && !folderByName.has(key)) folderByName.set(key, f.id);
-  }
+  const folderByName = folderIdsByName(folders);
   const byCategory = new Map<string, CategoryGroup>();
   for (const p of loose) {
     const name = tidy(p.category);
     if (!name) continue;
-    const key = name.toLowerCase();
+    const key = folderKey(name);
     let group = byCategory.get(key);
     if (!group) byCategory.set(key, (group = { name, folderId: folderByName.get(key), podcastIds: [] }));
     group.podcastIds.push(p.id);

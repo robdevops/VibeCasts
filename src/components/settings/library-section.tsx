@@ -7,6 +7,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { parseKey } from '@/lib/layout';
 import { buildOpml, OpmlError, parseOpml, type OpmlFeed } from '@/lib/opml';
 import { pickOpmlText, shareOpml } from '@/lib/opml-io';
+import { plural } from '@/lib/text';
 import { previewImport, useLibrary, type ImportResult } from '@/store/library';
 
 type State =
@@ -15,7 +16,6 @@ type State =
   | { step: 'done'; result: ImportResult; skipped: number }
   | { step: 'error'; message: string };
 
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /** Export podcasts in display order, with folders nested, as OPML text. */
 export function exportLibraryOpml(): string {

@@ -54,13 +54,20 @@ export async function fetchFeedConditional(feedUrl: string, validators?: FeedVal
   throw new FeedError("Couldn't reach the feed. Check your connection and try again.", 'network');
 }
 
+/** How long to wait for a feed's response headers. */
+const FETCH_TIMEOUT_MS = 30000;
+
 async function fetchOne(feedUrl: string, validators?: FeedValidators): Promise<{ text: string; validators: FeedValidators }> {
   const { url, authorization } = splitCredentials(feedUrl);
   // On web the proxy needs the credentials, so it gets the original URL and builds the header itself.
   const target = Platform.OS === 'web' ? feedFetchUrl(feedUrl) : url;
   let res: Response;
+  // A host that never answers must not hold a bulk refresh (or a backfill) forever.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
     res = await fetch(target, {
+      signal: controller.signal,
       headers: {
         Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml, */*;q=0.5',
         ...(authorization && Platform.OS !== 'web' ? { Authorization: authorization } : null),
@@ -70,6 +77,8 @@ async function fetchOne(feedUrl: string, validators?: FeedValidators): Promise<{
     });
   } catch {
     throw new FeedError("Couldn't reach the feed. Check your connection and try again.", 'network');
+  } finally {
+    clearTimeout(timer);
   }
   if (res.status === 304) throw new FeedNotModified();
   if (res.status === 401 || res.status === 403) {

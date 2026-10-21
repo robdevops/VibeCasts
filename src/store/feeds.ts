@@ -34,6 +34,10 @@ type Actions = {
   full: Record<string, FullFeed>;
   hydrate(): Promise<void>;
   remember(p: Podcast): void;
+  /** Keep this show's whole feed in memory while a screen is using it (it is not evicted until released). Returns the release. */
+  pinFull(podcastId: string): () => void;
+  /** Resolves once no backfill is running (a new one started while another runs would return at once). */
+  backfillIdle(): Promise<void>;
   /** Store an already-parsed feed (used when the feed was just fetched for another reason). */
   ingest(podcast: Podcast, parsed: ParsedFeed, validators?: FeedValidators, opts?: { keepFull?: boolean }): void;
   /** `conditional`: send the saved validators and skip the work if the feed hasn't changed (bulk and background refreshes). */
@@ -90,6 +94,12 @@ export function createFeedStore(
     }
     return best < 0 ? undefined : pending.splice(best, 1)[0];
   };
+  // Whole feeds in memory, oldest first. Kept as an array because object keys that look like integers (iTunes ids)
+  // enumerate in numeric order, not insertion order, which evicted the wrong show.
+  const fullOrder: string[] = [];
+  const pins = new Map<string, number>(); // shows a mounted screen is using: never evicted
+  // Shows whose whole feed was asked for while a bulk fetch of the same show (which keeps only the newest episodes) was in flight.
+  const wantFull = new Set<string>();
   // Bulk workers parked until the library is on screen again.
   const lookWaiters: (() => void)[] = [];
 
@@ -120,10 +130,34 @@ export function createFeedStore(
       set({ hydrated: true });
     },
 
+    pinFull(podcastId) {
+      pins.set(podcastId, (pins.get(podcastId) ?? 0) + 1);
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        const n = (pins.get(podcastId) ?? 1) - 1;
+        if (n > 0) pins.set(podcastId, n);
+        else pins.delete(podcastId);
+      };
+    },
+
+    backfillIdle() {
+      return new Promise<void>((resolve) => {
+        if (!get().backfillProgress) return resolve();
+        const off = store.subscribe((st) => {
+          if (st.backfillProgress) return;
+          off();
+          resolve();
+        });
+      });
+    },
+
     ingest(podcast, parsed, validators, opts) {
       const sorted = parsed.episodes
         .map((e) => ({ ...e, podcastId: podcast.id }))
         .sort((a, b) => b.published - a.published);
+      const wanted = wantFull.delete(podcast.id);
       set((s) => {
         const next: Partial<FeedData & Actions> = {
           feeds: {
@@ -132,13 +166,22 @@ export function createFeedStore(
           },
         };
         // A bulk refresh (every show in the library) only needs the newest episodes for the badges: keep the whole feed,
-        // with its show notes, only for a few shows (one being opened, or already held and now refreshed).
-        if (opts?.keepFull !== false || s.full[podcast.id]) {
-          const full = { ...s.full };
-          delete full[podcast.id]; // re-insert last: Object keys keep insertion order, so the oldest are first
-          full[podcast.id] = { episodes: sorted, meta: parsed.podcast };
-          const ids = Object.keys(full);
-          for (const id of ids.slice(0, Math.max(0, ids.length - MAX_FULL))) delete full[id];
+        // with its show notes, only for a few shows (one being opened, one already held and now refreshed, or one a screen
+        // asked for while this fetch was in flight).
+        if (opts?.keepFull !== false || wanted || s.full[podcast.id]) {
+          const full = { ...s.full, [podcast.id]: { episodes: sorted, meta: parsed.podcast } };
+          const at = fullOrder.indexOf(podcast.id);
+          if (at >= 0) fullOrder.splice(at, 1);
+          fullOrder.push(podcast.id);
+          for (let i = 0; fullOrder.length > MAX_FULL && i < fullOrder.length; ) {
+            const id = fullOrder[i];
+            if (id === podcast.id || pins.has(id)) {
+              i++;
+              continue;
+            }
+            fullOrder.splice(i, 1);
+            delete full[id];
+          }
           next.full = full;
         }
         return next;
@@ -147,7 +190,13 @@ export function createFeedStore(
     },
 
     async refresh(podcast, opts) {
-      if (!podcast.feedUrl || get().loading[podcast.id]) return;
+      if (!podcast.feedUrl) return;
+      if (get().loading[podcast.id]) {
+        // Already being fetched (possibly by a bulk refresh that keeps only the newest episodes): remember that a screen
+        // wants the whole feed, so that fetch's result is kept in full, or the feed is fetched again if it comes back 304.
+        if (opts?.keepFull !== false) wantFull.add(podcast.id);
+        return;
+      }
       set((s) => ({ loading: { ...s.loading, [podcast.id]: true } }));
       try {
         const res = await fetchText(podcast.feedUrl, opts?.conditional ? get().feeds[podcast.id]?.validators : undefined);
@@ -167,6 +216,7 @@ export function createFeedStore(
           const { [podcast.id]: _done, ...loading } = s.loading;
           return { loading };
         });
+        if (wantFull.delete(podcast.id) && !get().full[podcast.id]) void get().refresh(podcast); // once: a failure here is not retried
       }
     },
 

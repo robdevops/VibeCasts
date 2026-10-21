@@ -6,6 +6,7 @@ import type { KV } from '@/db/storage';
 import { createWriter } from '@/db/writer';
 import { emptyEpisodeState, episodeKey, type EpisodeState } from '@/lib/episode-state';
 import { parseKey, tileKey, type TileRef } from '@/lib/layout';
+import { folderIdsByName, folderKey } from '@/lib/folder-name';
 import { normalizeFeedUrl, type OpmlFeed } from '@/lib/opml';
 import { rssPodcastId } from '@/lib/podcast-id';
 import type { CategoryGroup } from '@/lib/auto-categorize';
@@ -153,7 +154,7 @@ export function createLibraryStore(storage: KV = kv) {
         const folders = { ...s.folders };
         const folderOrder = { ...s.folderOrder };
         const homeOrder = [...s.homeOrder];
-        const folderByName = new Map(Object.values(folders).map((f) => [f.name.toLowerCase(), f.id]));
+        const folderByName = folderIdsByName(Object.values(folders));
         const at = Date.now();
 
         for (const feed of feeds) {
@@ -163,13 +164,13 @@ export function createLibraryStore(storage: KV = kv) {
           }
           let folderId: string | undefined;
           if (feed.folder) {
-            folderId = folderByName.get(feed.folder.toLowerCase());
+            folderId = folderByName.get(folderKey(feed.folder));
             if (!folderId) {
               folderId = `${(at + result.folders).toString(36)}${Math.random().toString(36).slice(2, 6)}`;
               folders[folderId] = { id: folderId, name: feed.folder, color: FOLDER_COLORS[Object.keys(folders).length % FOLDER_COLORS.length], createdAt: at };
               folderOrder[folderId] = [];
               homeOrder.push(tileKey({ type: 'folder', id: folderId }));
-              folderByName.set(feed.folder.toLowerCase(), folderId);
+              folderByName.set(folderKey(feed.folder), folderId);
               result.folders++;
             }
           }
@@ -273,16 +274,20 @@ export function createLibraryStore(storage: KV = kv) {
         const moved = new Set<string>();
         const newKeys: string[] = [];
         const now = Date.now();
+        // The plan may be older than the library (a second plan applied after the first): a folder of that name that exists
+        // by now, including one this very call made, is reused instead of making a twin.
+        const byName = folderIdsByName(Object.values(folders));
         groups.forEach((g, i) => {
           // Only loose shows move: one in a folder of its own stays there.
           const ids = g.podcastIds.filter((id) => subscriptions[id] && !subscriptions[id].folderId);
           if (!ids.length) return;
-          let folderId = g.folderId && folders[g.folderId] ? g.folderId : undefined;
+          let folderId = g.folderId && folders[g.folderId] ? g.folderId : byName.get(folderKey(g.name));
           if (!folderId) {
             folderId = `${now.toString(36)}${i.toString(36)}${Math.random().toString(36).slice(2, 6)}`;
             folders[folderId] = { id: folderId, name: g.name, color: FOLDER_COLORS[Object.keys(folders).length % FOLDER_COLORS.length], createdAt: now };
             folderOrder[folderId] = [];
             newKeys.push(tileKey({ type: 'folder', id: folderId }));
+            byName.set(folderKey(g.name), folderId);
           }
           folderOrder[folderId] = [...(folderOrder[folderId] ?? []), ...ids];
           for (const id of ids) {
@@ -417,6 +422,6 @@ export type { TileRef };
 /** What an import would do, without changing anything (for the preview step). */
 export function previewImport(feeds: OpmlFeed[], subscriptions: Record<string, Subscription>) {
   const existing = feeds.filter((f) => findSubscriptionByFeed(subscriptions, f.feedUrl)).length;
-  const folders = new Set(feeds.filter((f) => f.folder).map((f) => f.folder!.toLowerCase())).size;
+  const folders = new Set(feeds.filter((f) => f.folder).map((f) => folderKey(f.folder))).size;
   return { found: feeds.length, existing, fresh: feeds.length - existing, folders };
 }

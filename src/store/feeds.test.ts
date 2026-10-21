@@ -237,3 +237,67 @@ describe('whole feeds in memory', () => {
     expect(Object.keys(s.getState().feeds)).toHaveLength(9);
   });
 });
+
+describe('whole feeds in memory: recency, pins and requests that arrive mid-fetch', () => {
+  const show = (id: string | number) => ({ ...pod, id: String(id), feedUrl: `https://f${id}.example/rss` });
+
+  it('evicts the least recently fetched show, also for integer-like (iTunes) ids', async () => {
+    const s = createFeedStore(createMemoryKV(), jest.fn(async () => sampleFeed));
+    for (const id of [1700000001, 1700000002, 1700000003, 1700000004, 1700000005, 1700000006, 1200361736]) await s.getState().refresh(show(id));
+    expect(Object.keys(s.getState().full)).toContain('1200361736'); // the one just opened stays
+    expect(Object.keys(s.getState().full)).not.toContain('1700000001'); // the oldest goes
+    expect(Object.keys(s.getState().full)).toHaveLength(6);
+  });
+
+  it('keeps a show a screen is using, until the screen lets go', async () => {
+    const s = createFeedStore(createMemoryKV(), jest.fn(async () => sampleFeed));
+    await s.getState().refresh(show(1));
+    const release = s.getState().pinFull('1');
+    for (let n = 2; n <= 9; n++) await s.getState().refresh(show(n));
+    expect(s.getState().full['1']).toBeDefined();
+    release();
+    await s.getState().refresh(show(10));
+    expect(s.getState().full['1']).toBeUndefined();
+  });
+
+  it('a whole-feed request that arrives during a bulk fetch of the same show gets the whole feed', async () => {
+    let finish: (v: string) => void = () => {};
+    const fetchText = jest.fn(() => new Promise<string>((r) => (finish = r)));
+    const s = createFeedStore(createMemoryKV(), fetchText);
+    const bulk = s.getState().refreshAll([show(1)]); // keeps only the newest episodes
+    await new Promise((r) => setTimeout(r, 0));
+    await s.getState().refresh(show(1)); // the page asks while that is in flight: dropped, but remembered
+    finish(sampleFeed);
+    await bulk;
+    expect(s.getState().full['1']).toBeDefined();
+    expect(fetchText).toHaveBeenCalledTimes(1);
+  });
+
+  it('fetches again when the in-flight bulk fetch came back unchanged (304)', async () => {
+    const calls: (string | undefined)[] = [];
+    let release: () => void = () => {};
+    let hold = false;
+    const fetchText = jest.fn(async (_u: string, v?: { etag?: string }) => {
+      calls.push(v?.etag);
+      if (hold) {
+        await new Promise<void>((r) => (release = r));
+        throw new FeedNotModified();
+      }
+      return { text: sampleFeed, validators: { etag: '"v1"' } };
+    });
+    const s = createFeedStore(createMemoryKV(), fetchText);
+    await s.getState().refresh(show(1)); // seeds the validators
+    for (let n = 2; n <= 8; n++) await s.getState().refresh(show(n)); // show 1's whole feed is evicted
+    expect(s.getState().full['1']).toBeUndefined();
+    hold = true;
+    const bulk = s.getState().refreshAll([show(1)]); // conditional: will come back 304
+    await new Promise((r) => setTimeout(r, 0));
+    await s.getState().refresh(show(1)); // a page opens meanwhile: dropped, but remembered
+    hold = false;
+    release();
+    await bulk;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(calls.slice(-2)).toEqual(['"v1"', undefined]); // the 304, then one plain fetch
+    expect(s.getState().full['1']).toBeDefined();
+  });
+});

@@ -94,6 +94,8 @@ export function EpisodeView({ podcastId, episodeId, onClose, sheet: isSheet = fa
 
   const isCurrent = !!viewed && current?.episode.id === viewed.episode.id && current.podcast.id === viewed.podcast.id;
   const feedLoading = useFeeds((s) => (feedId ? !!s.loading[feedId] : false));
+  // While this screen shows the show, its whole feed must not be evicted from memory (it would be fetched again, and again).
+  useEffect(() => (feedId ? useFeeds.getState().pinFull(feedId) : undefined), [feedId]);
   // The saved feed cache leaves out show notes: fetch the feed when we are about to show an episode without them.
   const needsNotes = !!viewed && !viewed.episode.description && !full;
   // Opened from history/a notification for an episode older than the cache: load the whole feed to find it.
@@ -165,7 +167,7 @@ export function EpisodeView({ podcastId, episodeId, onClose, sheet: isSheet = fa
     }
     const at = Math.round(usePlayer.getState().positionSec);
     const before = useBookmarks.getState().items.length;
-    useBookmarks.getState().add(podcast.id, episode.id, at);
+    useBookmarks.getState().add(podcast.id, episode.id, at, toRef(episode, podcast));
     const added = useBookmarks.getState().items.length > before;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     useToast.getState().show(added ? `Bookmarked at ${formatClock(at)}` : `Already bookmarked at ${formatClock(at)}`);

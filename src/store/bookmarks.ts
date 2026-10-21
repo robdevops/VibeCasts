@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 import { kv } from '@/db/kv';
 import type { KV } from '@/db/storage';
+import type { EpisodeRef } from '@/lib/playlist';
 
 export type Bookmark = {
   id: string;
@@ -10,13 +11,17 @@ export type Bookmark = {
   /** Position in the episode, seconds. */
   timeSec: number;
   createdAt: number;
+  /** The episode and show, saved so the bookmark can be listed and played without the show's feed. */
+  ref?: EpisodeRef;
 };
 
 type Actions = {
   items: Bookmark[];
   hydrated: boolean;
   hydrate(): Promise<void>;
-  add(podcastId: string, episodeId: string, timeSec: number): Bookmark;
+  add(podcastId: string, episodeId: string, timeSec: number, ref?: EpisodeRef): Bookmark;
+  /** Save the episode details on bookmarks that were made before they were kept (one update). */
+  attachRefs(refs: Record<string, EpisodeRef>): void;
   remove(id: string): void;
 };
 
@@ -35,7 +40,7 @@ export function createBookmarkStore(storage: KV = kv) {
       }
       set({ hydrated: true });
     },
-    add(podcastId, episodeId, timeSec) {
+    add(podcastId, episodeId, timeSec, ref) {
       const rounded = Math.round(timeSec);
       // Two taps at the same second shouldn't make two identical bookmarks.
       const existing = get().items.find((b) => b.podcastId === podcastId && b.episodeId === episodeId && b.timeSec === rounded);
@@ -46,9 +51,13 @@ export function createBookmarkStore(storage: KV = kv) {
         episodeId,
         timeSec: rounded,
         createdAt: Date.now(),
+        ref,
       };
       set((s) => ({ items: [...s.items, bookmark] }));
       return bookmark;
+    },
+    attachRefs(refs) {
+      set((s) => (s.items.some((b) => !b.ref && refs[b.id]) ? { items: s.items.map((b) => (!b.ref && refs[b.id] ? { ...b, ref: refs[b.id] } : b)) } : s));
     },
     remove: (id) => set((s) => ({ items: s.items.filter((b) => b.id !== id) })),
   }));

@@ -34,4 +34,9 @@ describe('planCategories', () => {
   it('does nothing for an empty library', () => {
     expect(planCategories([], [])).toEqual({ groups: [], leftLoose: 0, moved: 0 });
   });
+
+  it('matches a folder named with extra spaces, and the first of two same-named folders', () => {
+    const plan = planCategories([p('1', 'True Crime')], [{ id: 'a', name: 'True  Crime' }, { id: 'b', name: 'true crime' }]);
+    expect(plan.groups[0].folderId).toBe('a');
+  });
 });

@@ -67,6 +67,7 @@ export default function PodcastScreen() {
   const full = useFeeds((s) => s.full[id]);
   const cached = useFeeds((s) => s.feeds[id]);
   const loadingFeed = useFeeds((s) => !!s.loading[id]);
+  useEffect(() => useFeeds.getState().pinFull(id), [id]); // its whole feed is not evicted while this page is mounted
 
   const lookup = useAsync(`lookup-${id}`, () =>
     sub || known || !/^\d+$/.test(id) ? Promise.resolve(null) : lookupPodcast(id),

@@ -64,6 +64,15 @@ export function thumbFor(url: string | undefined, px: number): string | undefine
   return undefined;
 }
 
+/** The tile-sized copy could not be shown (the file is gone, e.g. the cache was cleared): forget it so the full image is used. */
+export function thumbFailed(url: string, px: number): void {
+  const id = `${px}|${url}`;
+  if (!made.delete(id)) return;
+  onDisk?.delete(nameFor(url, px));
+  missing.add(id);
+  listeners.get(id)?.forEach((cb) => cb());
+}
+
 function subscribe(id: string, cb: () => void) {
   let set = listeners.get(id);
   if (!set) listeners.set(id, (set = new Set()));

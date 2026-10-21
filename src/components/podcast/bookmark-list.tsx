@@ -1,12 +1,14 @@
 import { router } from 'expo-router';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Artwork } from '@/components/ui/artwork';
 import { Icon } from '@/components/ui/icon';
 import { useTheme } from '@/hooks/use-theme';
+import type { Episode, Podcast } from '@/api/types';
 import { formatClock } from '@/lib/player-math';
+import { fromRef, toRef, type EpisodeRef } from '@/lib/playlist';
 import { playEpisodeAt } from '@/player';
 import { useBookmarks } from '@/store/bookmarks';
 import { useFeeds } from '@/store/feeds';
@@ -21,18 +23,41 @@ export function BookmarkList({ podcastId, emptyText }: { podcastId?: string; emp
   const known = useFeeds((s) => s.known);
   const subs = useLibrary((s) => s.subscriptions);
 
+  // An episode comes from the feed when it is held, else from the copy saved with the bookmark.
   const rows = useMemo(
     () =>
       items
         .filter((b) => !podcastId || b.podcastId === podcastId)
         .sort((a, b) => b.createdAt - a.createdAt)
         .flatMap((b) => {
-          const podcast = subs[b.podcastId]?.podcast ?? known[b.podcastId];
-          const episode = (full[b.podcastId]?.episodes ?? feeds[b.podcastId]?.episodes)?.find((e) => e.id === b.episodeId);
-          return podcast && episode ? [{ b, podcast, episode }] : [];
+          const saved = b.ref ? fromRef(b.ref) : undefined;
+          const podcast = subs[b.podcastId]?.podcast ?? known[b.podcastId] ?? saved?.podcast;
+          const live = (full[b.podcastId]?.episodes ?? feeds[b.podcastId]?.episodes)?.find((e) => e.id === b.episodeId);
+          const episode: Episode | undefined = live ?? saved?.episode;
+          return podcast && episode ? [{ b, podcast: podcast as Podcast, episode }] : [];
         }),
     [items, podcastId, subs, known, full, feeds],
   );
+
+  // Bookmarks made before the episode was saved with them: save it now when the feed has it, otherwise load that show's
+  // feed once (a few shows at a time) so the row doesn't disappear when the feed isn't held in memory.
+  const asked = useRef(new Set<string>());
+  useEffect(() => {
+    const refs: Record<string, EpisodeRef> = {};
+    const toLoad: Podcast[] = [];
+    for (const b of items) {
+      if (b.ref) continue;
+      const podcast = subs[b.podcastId]?.podcast ?? known[b.podcastId];
+      const live = (full[b.podcastId]?.episodes ?? feeds[b.podcastId]?.episodes)?.find((e) => e.id === b.episodeId);
+      if (podcast && live) refs[b.id] = toRef(live, podcast);
+      else if (podcast && !asked.current.has(podcast.id) && toLoad.length < 4) toLoad.push(podcast);
+    }
+    if (Object.keys(refs).length) useBookmarks.getState().attachRefs(refs);
+    for (const p of toLoad) {
+      asked.current.add(p.id);
+      void useFeeds.getState().refresh(p);
+    }
+  }, [items, subs, known, full, feeds]);
 
   if (!rows.length) {
     return (

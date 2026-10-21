@@ -204,6 +204,23 @@ describe('applyCategories', () => {
     expect(st.homeOrder).toEqual([`f:${comedy.id}`, `f:${news}`, `f:${mine}`, 'p:4']);
   });
 
+  it('re-matches folders by name when applying, so a second plan does not make a twin', () => {
+    const s = setup();
+    s.getState().applyCategories([{ name: 'Comedy', podcastIds: ['1', '2'] }]);
+    s.getState().applyCategories([{ name: 'comedy', podcastIds: ['3'] }]); // planned before the first was applied
+    const comedies = Object.values(s.getState().folders).filter((f) => f.name.toLowerCase() === 'comedy');
+    expect(comedies).toHaveLength(1);
+    expect(s.getState().folderOrder[comedies[0].id]).toEqual(['1', '2', '3']);
+  });
+
+  it('imports into the first folder of a name', () => {
+    const s = createLibraryStore(createMemoryKV());
+    const a = s.getState().createFolder('News', '#fff');
+    s.getState().createFolder('news', '#000');
+    s.getState().importFeeds([{ title: 'T', feedUrl: 'https://x.example/rss', folder: 'NEWS' }]);
+    expect(s.getState().folderOrder[a]).toHaveLength(1);
+  });
+
   it('does nothing when nothing can move', () => {
     const s = setup();
     const before = s.getState().homeOrder;

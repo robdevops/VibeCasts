@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import { useMemo, useState } from 'react';
 import { PixelRatio, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { tileThumbPx, useThumb } from '@/artwork/thumbs';
+import { thumbFailed, tileThumbPx, useThumb } from '@/artwork/thumbs';
 import { artworkSized } from '@/lib/artwork';
 import { markShown, wasShown } from '@/lib/shown-images';
 
@@ -26,8 +26,9 @@ type Props = {
 
 /** Square podcast artwork with a coloured initial as the fallback. */
 export function Artwork({ uri, title, size, radius = 10, style, accessibilityLabel, accessibilityRole }: Props) {
-  // The placeholder letter is only needed until the picture is there.
-  const [loaded, setLoaded] = useState(false);
+  // The placeholder letter is only needed until the picture is there. Which picture loaded is remembered (not just
+  // "one did"): an instance that stays mounted while its show changes (the mini player) must show the letter again.
+  const [loadedFor, setLoadedFor] = useState<string>();
   // Tiles fill their column (no fixed size): ~110 pt on a phone.
   const wantPx = (size ?? 120) * PixelRatio.get();
   const full = uri ? artworkSized(uri, wantPx) : undefined;
@@ -45,7 +46,7 @@ export function Artwork({ uri, title, size, radius = 10, style, accessibilityLab
       accessibilityLabel={accessibilityLabel}
       accessibilityRole={accessibilityRole}
       style={[styles.box, dim, { borderRadius: radius, backgroundColor: colorFor(title) }, style]}>
-      {known || loaded ? null : <Text style={[styles.initial, { fontSize: size ? size * 0.4 : 36 }]}>{title.trim().charAt(0).toUpperCase()}</Text>}
+      {known || (!!source && loadedFor === source) ? null : <Text style={[styles.initial, { fontSize: size ? size * 0.4 : 36 }]}>{title.trim().charAt(0).toUpperCase()}</Text>}
       {uri ? (
         // Non-interactive so taps/drags reach the tile, and web doesn't start a native image drag.
         <Image
@@ -58,7 +59,10 @@ export function Artwork({ uri, title, size, radius = 10, style, accessibilityLab
           transition={known ? 0 : 150}
           onLoad={() => {
             if (source) markShown(source);
-            setLoaded(true);
+            setLoadedFor(source);
+          }}
+          onError={() => {
+            if (uri && source !== full && source === thumb) thumbFailed(uri, thumbPx); // fall back to the full image
           }}
           accessibilityIgnoresInvertColors
         />

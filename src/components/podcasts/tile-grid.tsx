@@ -144,12 +144,12 @@ export function TileGrid({
     visibleCb.current = onVisibleChange;
   });
   const lastRange = useRef({ start: -1, end: -1 });
-  // The rows at the top and bottom of the viewport at the last window update: nothing to work out until one of them changes.
-  const lastRows = useRef({ top: -1, bottom: -1 });
 
   const updateWindow = useCallback(
-    (y: number) => {
+    (y: number, force = false) => {
       const next = visibleRange(y, viewportH.current || windowHeight, m, items.length);
+      // Scrolling within the same rows changes nothing; a change of layout or items (`force`) always re-merges the window.
+      if (!force && next.start === lastRange.current.start && next.end === lastRange.current.end) return;
       // Keep recently visible tiles mounted (only let go of far-away ones): remounting makes art flash.
       setWin((w) => {
         const merged = mountedRange(w, next, m.cols);
@@ -163,7 +163,7 @@ export function TileGrid({
     [items.length, m, windowHeight],
   );
   useEffect(() => {
-    updateWindow(scrollNow.current);
+    updateWindow(scrollNow.current, true);
   }, [updateWindow]);
 
   const removeBottom = insets.top + HEADER_HEIGHT;
@@ -484,12 +484,6 @@ export function TileGrid({
           scrollNow.current = y;
           // Only the dragged tile's ghost follows the scroll position on the UI thread, so it is only needed during a drag.
           if (drag.current) scrollY.set(y);
-          const step = m.tile + m.gap;
-          if (step <= 0) return;
-          const top = Math.floor((y - m.pad) / step);
-          const bottom = Math.floor((y + (viewportH.current || windowHeight) - m.pad) / step);
-          if (top === lastRows.current.top && bottom === lastRows.current.bottom) return;
-          lastRows.current = { top, bottom };
           updateWindow(y);
         }}
         refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} /> : undefined}
