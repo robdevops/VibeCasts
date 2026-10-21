@@ -23,29 +23,33 @@ type Props = { visible: boolean; items: MenuItem[]; onClose: () => void; title?:
 /** Popover menu anchored to the top-right (default) or bottom-right of the screen. */
 export function MenuSheet({ visible, items, onClose, title, anchor = 'top', dark }: Props) {
   const theme = useTheme();
-  // Scrolling is only switched on when the rows really don't fit: a menu that fits must not wobble or scroll at all.
-  const [sizes, setSizes] = useState({ content: 0, view: 0 });
+  // The rows' real height, measured on a plain view inside the scroller. The card's height comes from this and not from
+  // the scroll view's own sizing, which had settled before a long label wrapped and left the card a line short (the last
+  // row cut off, with no bottom padding, and the menu scrolling).
+  const [contentH, setContentH] = useState(0);
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   // Keep clear of the screen's bottom edge (and the gesture bar) so the last item is never cramped.
   const topOffset = insets.top + 52;
   const maxHeight = height - topOffset - insets.bottom - BOTTOM_MARGIN;
+  const cap = anchor === 'top' ? maxHeight : height - insets.top - insets.bottom - 140;
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close menu" />
       <View
         style={[
           styles.card,
-          anchor === 'top' ? { top: topOffset, maxHeight } : { bottom: insets.bottom + 100, maxHeight: height - insets.top - insets.bottom - 140 },
+          anchor === 'top' ? { top: topOffset, maxHeight: cap } : { bottom: insets.bottom + 100, maxHeight: cap },
           { backgroundColor: dark ? '#1E1433' : theme.background, borderColor: dark ? 'rgba(255,255,255,0.15)' : theme.border },
         ]}>
         <ScrollView
+          testID="menu-scroll"
           bounces={false}
           overScrollMode="never"
-          scrollEnabled={sizes.content > sizes.view + 1}
-          onLayout={(e) => setSizes((z) => ({ ...z, view: e.nativeEvent.layout.height }))}
-          onContentSizeChange={(_w, h) => setSizes((z) => ({ ...z, content: h }))}
-          showsVerticalScrollIndicator={false} style={styles.scroll} contentContainerStyle={styles.pad}>
+          scrollEnabled={contentH > cap}
+          showsVerticalScrollIndicator={false}
+          style={[styles.scroll, contentH > 0 ? { height: Math.min(contentH, cap) } : null]}>
+        <View testID="menu-content" style={styles.pad} onLayout={(e) => setContentH(Math.ceil(e.nativeEvent.layout.height))}>
         {title ? (
           <ThemedText type="smallBold" themeColor="textSecondary" style={styles.title}>
             {title}
@@ -73,6 +77,7 @@ export function MenuSheet({ visible, items, onClose, title, anchor = 'top', dark
             </Pressable>
           </View>
         ))}
+        </View>
         </ScrollView>
       </View>
     </Modal>
