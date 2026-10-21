@@ -4,13 +4,14 @@ import { router } from 'expo-router';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { LayoutAnimation, Linking, Pressable, ScrollView, Share, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
-import Animated, { interpolate, useAnimatedStyle, useSharedValue, type SharedValue } from 'react-native-reanimated';
+import Animated, { interpolate, useAnimatedStyle, useSharedValue, ZoomIn, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ELASTIC_SCROLL } from '@/constants/scroll';
 import type { Episode, Podcast } from '@/api/types';
 import { ThemedText } from '@/components/themed-text';
 import { Artwork } from '@/components/ui/artwork';
+import { GlowPressable } from '@/components/ui/glow-pressable';
 import { Icon, type IconName } from '@/components/ui/icon';
 import { MenuSheet, type MenuItem } from '@/components/ui/menu-sheet';
 import { AddToPlaylistSheet } from '@/components/playlists/add-to-playlist-sheet';
@@ -288,15 +289,47 @@ export function EpisodeView({ podcastId, episodeId, onClose, sheet: isSheet = fa
           </SwipeIgnore>
 
           <View style={styles.controls}>
-            <Pressable accessibilityRole="button" accessibilityLabel={`Skip back ${skipBack} seconds`} disabled={!isCurrent} onPress={() => usePlayer.getState().skipBack()} hitSlop={10} style={!isCurrent ? styles.dim : undefined}>
+            <GlowPressable
+              accessibilityRole="button"
+              accessibilityLabel={`Skip back ${skipBack} seconds`}
+              disabled={!isCurrent}
+              onPress={() => usePlayer.getState().skipBack()}
+              hitSlop={10}
+              glowColor="#ffffff"
+              glowSize={84}
+              pressedScale={0.86}
+              tiltDeg={-40}
+              style={!isCurrent ? styles.dim : undefined}>
               <SkipIcon direction="back" seconds={skipBack} size={56} color="#fff" />
-            </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel={isCurrent && playing ? 'Pause' : 'Play'} onPress={playPause} style={styles.bigPlay}>
-              <Icon name={isCurrent && playing ? 'pause' : 'play-arrow'} size={56} color={BG} />
-            </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel={`Skip forward ${skipForward} seconds`} disabled={!isCurrent} onPress={() => usePlayer.getState().skipForward()} hitSlop={10} style={!isCurrent ? styles.dim : undefined}>
+            </GlowPressable>
+            <GlowPressable
+              accessibilityRole="button"
+              accessibilityLabel={isCurrent && playing ? 'Pause' : 'Play'}
+              onPress={playPause}
+              glowColor="#ffffff"
+              glowSize={124}
+              pressedScale={0.9}
+              style={styles.bigPlayBox}>
+              <View style={styles.bigPlay}>
+                {/* The icon pops in when it changes between play and pause. */}
+                <Animated.View key={isCurrent && playing ? 'pause' : 'play'} entering={ZoomIn.duration(170)}>
+                  <Icon name={isCurrent && playing ? 'pause' : 'play-arrow'} size={56} color={BG} />
+                </Animated.View>
+              </View>
+            </GlowPressable>
+            <GlowPressable
+              accessibilityRole="button"
+              accessibilityLabel={`Skip forward ${skipForward} seconds`}
+              disabled={!isCurrent}
+              onPress={() => usePlayer.getState().skipForward()}
+              hitSlop={10}
+              glowColor="#ffffff"
+              glowSize={84}
+              pressedScale={0.86}
+              tiltDeg={40}
+              style={!isCurrent ? styles.dim : undefined}>
               <SkipIcon direction="forward" seconds={skipForward} size={56} color="#fff" />
-            </Pressable>
+            </GlowPressable>
           </View>
           {isCurrent && buffering && playing ? <ThemedText type="small" style={[styles.time, styles.center]}>Buffering…</ThemedText> : null}
 
@@ -524,6 +557,7 @@ const styles = StyleSheet.create({
   time: { color: MUTED },
   center: { textAlign: 'center' },
   controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 12 },
+  bigPlayBox: { width: 92, height: 92 },
   bigPlay: { width: 92, height: 92, borderRadius: 46, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   bar: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 18, paddingVertical: 10 },
   barButton: { width: 56, height: 48, alignItems: 'center', justifyContent: 'center' },

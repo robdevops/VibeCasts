@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Artwork } from '@/components/ui/artwork';
+import { GlowPressable } from '@/components/ui/glow-pressable';
 import { Icon } from '@/components/ui/icon';
 import { useTheme } from '@/hooks/use-theme';
 import { useSettings } from '@/store/settings';
@@ -47,19 +48,38 @@ export function MiniPlayerView() {
               {episode.title}
             </ThemedText>
           </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Skip back ${skipBack} seconds`} onPress={() => usePlayer.getState().skipBack()} hitSlop={6}>
+          <GlowPressable
+            accessibilityRole="button"
+            accessibilityLabel={`Skip back ${skipBack} seconds`}
+            onPress={() => usePlayer.getState().skipBack()}
+            hitSlop={6}
+            glowColor={theme.accent}
+            glowSize={44}
+            tiltDeg={-35}>
             <SkipIcon direction="back" seconds={skipBack} size={32} color={theme.accent} />
-          </Pressable>
-          <Pressable
+          </GlowPressable>
+          <GlowPressable
             accessibilityRole="button"
             accessibilityLabel={playing ? 'Pause' : 'Play'}
             onPress={() => usePlayer.getState().toggle()}
-            style={[styles.play, { backgroundColor: theme.accent }]}>
-            <Icon name={playing ? 'pause' : 'play-arrow'} size={30} color="#fff" />
-          </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Skip forward ${skipForward} seconds`} onPress={() => usePlayer.getState().skipForward()} hitSlop={6}>
+            glowColor={theme.accent}
+            glowSize={64}
+            pressedScale={0.88}
+            style={styles.playBox}>
+            <View style={[styles.play, { backgroundColor: theme.accent }]}>
+              <Icon name={playing ? 'pause' : 'play-arrow'} size={30} color="#fff" />
+            </View>
+          </GlowPressable>
+          <GlowPressable
+            accessibilityRole="button"
+            accessibilityLabel={`Skip forward ${skipForward} seconds`}
+            onPress={() => usePlayer.getState().skipForward()}
+            hitSlop={6}
+            glowColor={theme.accent}
+            glowSize={44}
+            tiltDeg={35}>
             <SkipIcon direction="forward" seconds={skipForward} size={32} color={theme.accent} />
-          </Pressable>
+          </GlowPressable>
         </View>
         {/* Thin progress line along the bottom edge. Display only: seeking happens on the player screen. */}
         <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no" style={styles.track}>
@@ -95,6 +115,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 10, paddingTop: 8, paddingBottom: 8 },
   art: { borderRadius: 8 },
   spacer: { flex: 1, minWidth: 0 },
+  playBox: { width: 48, height: 48 },
   play: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
   track: { height: 3 },
   trackBg: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, opacity: 0.3 },
