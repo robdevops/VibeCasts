@@ -1,5 +1,8 @@
+/** A name with runs of spaces collapsed and the ends trimmed. */
+export const tidyName = (name: string | undefined): string => (name ?? '').replace(/\s+/g, ' ').trim();
+
 /** How folder names are compared (import, Auto categorize): case and runs of spaces don't matter. */
-export const folderKey = (name: string | undefined): string => (name ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+export const folderKey = (name: string | undefined): string => tidyName(name).toLowerCase();
 
 /** The first folder of each name wins, so every caller agrees which of two same-named folders is meant. */
 export function folderIdsByName(folders: { id: string; name: string }[]): Map<string, string> {

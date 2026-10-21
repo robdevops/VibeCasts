@@ -4,7 +4,7 @@ import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { useCallback, useSyncExternalStore } from 'react';
 import { Dimensions, PixelRatio, Platform } from 'react-native';
 
-import { artworkSized } from '@/lib/artwork';
+import { artworkSized, roundPx } from '@/lib/artwork';
 import { metricsFor } from '@/lib/grid';
 
 /**
@@ -21,7 +21,7 @@ export const tileThumbPx = (): number => {
   const width = Dimensions.get('window').width;
   const ratio = PixelRatio.get();
   if (!thumbPx || thumbPx.width !== width || thumbPx.ratio !== ratio) {
-    thumbPx = { width, ratio, px: Math.max(100, Math.ceil((metricsFor(width).tile * ratio) / 100) * 100) };
+    thumbPx = { width, ratio, px: roundPx(metricsFor(width).tile * ratio) };
   }
   return thumbPx.px;
 };

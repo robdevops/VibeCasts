@@ -11,6 +11,7 @@ import { NamePrompt } from '@/components/ui/name-prompt';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { useTheme } from '@/hooks/use-theme';
 import { usePlaylists } from '@/store/playlists';
+import { plural } from '@/lib/text';
 
 export default function PlaylistsScreen() {
   const theme = useTheme();
@@ -46,7 +47,7 @@ export default function PlaylistsScreen() {
             <View style={{ flex: 1, gap: 2 }}>
               <ThemedText type="smallBold">{item.name}</ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
-                {item.count} episode{item.count === 1 ? '' : 's'}
+                {plural(item.count, 'episode')}
                 {item.hint ? ` · ${item.hint}` : ''}
               </ThemedText>
             </View>

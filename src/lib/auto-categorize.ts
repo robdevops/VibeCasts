@@ -1,11 +1,9 @@
-import { folderIdsByName, folderKey } from './folder-name';
+import { folderIdsByName, folderKey, tidyName } from './folder-name';
 
 export type CategoryGroup = { name: string; folderId?: string; podcastIds: string[] };
 export type CategoryPlan = { groups: CategoryGroup[]; leftLoose: number; moved: number };
 
 type Candidate = { id: string; category?: string };
-
-const tidy = (s: string | undefined) => (s ?? '').replace(/\s+/g, ' ').trim();
 
 /**
  * Work out which loose podcasts go into which category folder. A category that already has a folder (same name, any
@@ -16,7 +14,7 @@ export function planCategories(loose: Candidate[], folders: { id: string; name: 
   const folderByName = folderIdsByName(folders);
   const byCategory = new Map<string, CategoryGroup>();
   for (const p of loose) {
-    const name = tidy(p.category);
+    const name = tidyName(p.category);
     if (!name) continue;
     const key = folderKey(name);
     let group = byCategory.get(key);

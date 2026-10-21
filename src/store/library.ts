@@ -38,6 +38,9 @@ export function findSubscriptionByFeed(subscriptions: Record<string, Subscriptio
 
 export type Folder = { id: string; name: string; color: string; createdAt?: number };
 
+const newFolderId = (at: number) => `${at.toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+const nextFolderColor = (folders: Record<string, Folder>) => FOLDER_COLORS[Object.keys(folders).length % FOLDER_COLORS.length];
+
 
 export type LibraryData = {
   subscriptions: Record<string, Subscription>;
@@ -166,8 +169,8 @@ export function createLibraryStore(storage: KV = kv) {
           if (feed.folder) {
             folderId = folderByName.get(folderKey(feed.folder));
             if (!folderId) {
-              folderId = `${(at + result.folders).toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-              folders[folderId] = { id: folderId, name: feed.folder, color: FOLDER_COLORS[Object.keys(folders).length % FOLDER_COLORS.length], createdAt: at };
+              folderId = newFolderId(at + result.folders);
+              folders[folderId] = { id: folderId, name: feed.folder, color: nextFolderColor(folders), createdAt: at };
               folderOrder[folderId] = [];
               homeOrder.push(tileKey({ type: 'folder', id: folderId }));
               folderByName.set(folderKey(feed.folder), folderId);
@@ -206,6 +209,8 @@ export function createLibraryStore(storage: KV = kv) {
           description: p.description ?? meta.description,
           needsMeta: false,
         };
+        // Most feed arrivals tell us nothing new: leave the library alone (no recompute, no write).
+        if (next.title === p.title && next.author === p.author && next.artwork === p.artwork && next.category === p.category && next.website === p.website && next.description === p.description && !p.needsMeta) return s;
         return { subscriptions: { ...s.subscriptions, [id]: { ...sub, podcast: next } } };
       });
     },
@@ -225,7 +230,7 @@ export function createLibraryStore(storage: KV = kv) {
     },
 
     createFolder(name, color) {
-      const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+      const id = newFolderId(Date.now());
       set((s) => ({
         folders: { ...s.folders, [id]: { id, name, color, createdAt: Date.now() } },
         folderOrder: { ...s.folderOrder, [id]: [] },
@@ -283,8 +288,8 @@ export function createLibraryStore(storage: KV = kv) {
           if (!ids.length) return;
           let folderId = g.folderId && folders[g.folderId] ? g.folderId : byName.get(folderKey(g.name));
           if (!folderId) {
-            folderId = `${now.toString(36)}${i.toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-            folders[folderId] = { id: folderId, name: g.name, color: FOLDER_COLORS[Object.keys(folders).length % FOLDER_COLORS.length], createdAt: now };
+            folderId = newFolderId(now + i);
+            folders[folderId] = { id: folderId, name: g.name, color: nextFolderColor(folders), createdAt: now };
             folderOrder[folderId] = [];
             newKeys.push(tileKey({ type: 'folder', id: folderId }));
             byName.set(folderKey(g.name), folderId);

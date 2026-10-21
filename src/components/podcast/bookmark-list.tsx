@@ -7,12 +7,17 @@ import { Artwork } from '@/components/ui/artwork';
 import { Icon } from '@/components/ui/icon';
 import { useTheme } from '@/hooks/use-theme';
 import type { Episode, Podcast } from '@/api/types';
+import type { Bookmark } from '@/store/bookmarks';
 import { formatClock } from '@/lib/player-math';
 import { fromRef, toRef, type EpisodeRef } from '@/lib/playlist';
 import { playEpisodeAt } from '@/player';
 import { useBookmarks } from '@/store/bookmarks';
 import { useFeeds } from '@/store/feeds';
 import { useLibrary } from '@/store/library';
+
+const showOf = (subs: Record<string, { podcast: Podcast }>, known: Record<string, Podcast>, podcastId: string) => subs[podcastId]?.podcast ?? known[podcastId];
+const liveEpisode = (full: Record<string, { episodes: Episode[] }>, feeds: Record<string, { episodes: Episode[] }>, b: Bookmark) =>
+  (full[b.podcastId]?.episodes ?? feeds[b.podcastId]?.episodes)?.find((e) => e.id === b.episodeId);
 
 /** Saved positions. With `podcastId` only that show's bookmarks are listed. */
 export function BookmarkList({ podcastId, emptyText }: { podcastId?: string; emptyText: string }) {
@@ -31,9 +36,8 @@ export function BookmarkList({ podcastId, emptyText }: { podcastId?: string; emp
         .sort((a, b) => b.createdAt - a.createdAt)
         .flatMap((b) => {
           const saved = b.ref ? fromRef(b.ref) : undefined;
-          const podcast = subs[b.podcastId]?.podcast ?? known[b.podcastId] ?? saved?.podcast;
-          const live = (full[b.podcastId]?.episodes ?? feeds[b.podcastId]?.episodes)?.find((e) => e.id === b.episodeId);
-          const episode: Episode | undefined = live ?? saved?.episode;
+          const podcast = showOf(subs, known, b.podcastId) ?? saved?.podcast;
+          const episode: Episode | undefined = liveEpisode(full, feeds, b) ?? saved?.episode;
           return podcast && episode ? [{ b, podcast: podcast as Podcast, episode }] : [];
         }),
     [items, podcastId, subs, known, full, feeds],
@@ -47,8 +51,8 @@ export function BookmarkList({ podcastId, emptyText }: { podcastId?: string; emp
     const toLoad: Podcast[] = [];
     for (const b of items) {
       if (b.ref) continue;
-      const podcast = subs[b.podcastId]?.podcast ?? known[b.podcastId];
-      const live = (full[b.podcastId]?.episodes ?? feeds[b.podcastId]?.episodes)?.find((e) => e.id === b.episodeId);
+      const podcast = showOf(subs, known, b.podcastId);
+      const live = liveEpisode(full, feeds, b);
       if (podcast && live) refs[b.id] = toRef(live, podcast);
       else if (podcast && !asked.current.has(podcast.id) && toLoad.length < 4) toLoad.push(podcast);
     }

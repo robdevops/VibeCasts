@@ -5,6 +5,7 @@ import { NamePrompt } from '@/components/ui/name-prompt';
 import type { EpisodeRef } from '@/lib/playlist';
 import { usePlaylists } from '@/store/playlists';
 import { useToast } from '@/store/toast';
+import { plural } from '@/lib/text';
 
 type Props = { visible: boolean; refs: EpisodeRef[]; onClose: () => void };
 
@@ -12,7 +13,7 @@ type Props = { visible: boolean; refs: EpisodeRef[]; onClose: () => void };
 export function AddToPlaylistSheet({ visible, refs, onClose }: Props) {
   const playlists = usePlaylists((s) => s.playlists);
   const [naming, setNaming] = useState(false);
-  const count = refs.length === 1 ? 'episode' : `${refs.length} episodes`;
+  const count = refs.length === 1 ? 'episode' : plural(refs.length, 'episode');
 
   const addTo = (id: string, name: string) => {
     usePlaylists.getState().addToPlaylist(id, refs);

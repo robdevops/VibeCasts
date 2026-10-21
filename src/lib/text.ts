@@ -14,5 +14,8 @@ export function stripHtml(html: string | null | undefined): string {
     .trim();
 }
 
+/** "3 MB" for a file size in bytes (at least 1). */
+export const formatMegabytes = (bytes: number) => `${Math.max(1, Math.round(bytes / 1_000_000))} MB`;
+
 /** "1 podcast", "2 podcasts" (or a given plural). */
 export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;

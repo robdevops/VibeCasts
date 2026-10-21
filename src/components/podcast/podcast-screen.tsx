@@ -39,6 +39,7 @@ import { toggleEpisode } from '@/player';
 import { AddToPlaylistSheet } from '@/components/playlists/add-to-playlist-sheet';
 import { toRef, type EpisodeRef } from '@/lib/playlist';
 import { usePlaylists } from '@/store/playlists';
+import { plural } from '@/lib/text';
 import { requestNotificationPermission } from '@/notifications/platform';
 import { downloadsSupported, useDownloads } from '@/downloads/download-manager';
 import { useFeeds } from '@/store/feeds';
@@ -215,7 +216,7 @@ export default function PodcastScreen() {
     if (!podcast) return;
     const todo = episodes.filter((e) => !states[episodeKey(id, e.id)]?.played && !states[episodeKey(id, e.id)]?.archived).slice(0, 10);
     for (const e of todo) useDownloads.getState().download(e, podcast);
-    useToast.getState().show(todo.length ? `Downloading ${todo.length} episode${todo.length === 1 ? '' : 's'}` : 'Nothing unplayed to download');
+    useToast.getState().show(todo.length ? `Downloading ${plural(todo.length, 'episode')}` : 'Nothing unplayed to download');
   };
 
   const selectedEpisodes = episodes.filter((e) => selected.has(e.id));
@@ -234,7 +235,7 @@ export default function PodcastScreen() {
     const refs = selectedRefs();
     if (where === 'first') usePlaylists.getState().playNext(refs);
     else usePlaylists.getState().playLast(refs);
-    useToast.getState().show(`${refs.length} episode${refs.length === 1 ? '' : 's'} ${where === 'first' ? 'will play next' : 'added to Up Next'}`);
+    useToast.getState().show(`${plural(refs.length, 'episode')} ${where === 'first' ? 'will play next' : 'added to Up Next'}`);
     setSelected(new Set());
   };
 

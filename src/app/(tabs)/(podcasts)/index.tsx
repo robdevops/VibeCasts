@@ -44,7 +44,7 @@ export default function PodcastsScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const podcasts = useMemo(() => Object.values(view.subscriptions).map((s) => s.podcast), [view.subscriptions]);
-  const podcastIds = podcasts.map((p) => p.id).join(',');
+  const podcastIds = useMemo(() => podcasts.map((p) => p.id).join(','), [podcasts]);
 
   // Fetch feeds that are missing or stale once storage has loaded, and when new shows are added.
   useEffect(() => {

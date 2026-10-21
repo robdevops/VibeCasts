@@ -9,6 +9,7 @@ import { ScreenHeader } from '@/components/ui/screen-header';
 import { useTheme } from '@/hooks/use-theme';
 import { useBookmarks } from '@/store/bookmarks';
 import { useLibrary } from '@/store/library';
+import { plural } from '@/lib/text';
 
 type Route = '/downloads' | '/starred' | '/bookmarks' | '/history' | '/settings';
 
@@ -46,7 +47,7 @@ export default function ProfileScreen() {
           </View>
           <ThemedText type="subtitle">Your library</ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
-            {subscriptions} podcast{subscriptions === 1 ? '' : 's'}
+            {plural(subscriptions, 'podcast')}
           </ThemedText>
         </View>
         {row('file-download', 'Downloads', '/downloads', downloaded)}

@@ -31,15 +31,14 @@ export function MenuSheet({ visible, items, onClose, title, anchor = 'top', dark
   const { height } = useWindowDimensions();
   // Keep clear of the screen's bottom edge (and the gesture bar) so the last item is never cramped.
   const topOffset = insets.top + 52;
-  const maxHeight = height - topOffset - insets.bottom - BOTTOM_MARGIN;
-  const cap = anchor === 'top' ? maxHeight : height - insets.top - insets.bottom - 140;
+  const cap = anchor === 'top' ? height - topOffset - insets.bottom - BOTTOM_MARGIN : height - insets.top - insets.bottom - 140;
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close menu" />
       <View
         style={[
           styles.card,
-          anchor === 'top' ? { top: topOffset, maxHeight: cap } : { bottom: insets.bottom + 100, maxHeight: cap },
+          { maxHeight: cap }, anchor === 'top' ? { top: topOffset } : { bottom: insets.bottom + 100 },
           { backgroundColor: dark ? '#1E1433' : theme.background, borderColor: dark ? 'rgba(255,255,255,0.15)' : theme.border },
         ]}>
         <ScrollView

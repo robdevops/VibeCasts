@@ -18,7 +18,7 @@ import { durationLabel } from '@/lib/episode-list';
 import { emptyEpisodeState, episodeKey, timeLeftLabel } from '@/lib/episode-state';
 import { formatClock } from '@/lib/player-math';
 import { toRef } from '@/lib/playlist';
-import { stripHtml } from '@/lib/text';
+import { formatMegabytes, stripHtml } from '@/lib/text';
 import { bookmarksForEpisode, useBookmarks } from '@/store/bookmarks';
 import { useFeeds } from '@/store/feeds';
 import { useLibrary } from '@/store/library';
@@ -43,7 +43,6 @@ function closeLobby() {
   else router.replace('/');
 }
 
-const megabytes = (bytes: number) => `${Math.max(1, Math.round(bytes / 1_000_000))} MB`;
 const fullDate = (ms: number) => (ms > 0 ? new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' }) : '');
 
 /** Find the episode being looked at (from the cached or full feed), fetching the feed when its show notes are missing. */
@@ -200,7 +199,7 @@ function EpisodeLobby({ podcastId, episodeId }: { podcastId?: string; episodeId?
     </Pressable>
   );
 
-  const downloadLabel = state.downloadedUri ? 'Downloaded' : downloading ? 'Downloading…' : episode.sizeBytes ? megabytes(episode.sizeBytes) : 'Download';
+  const downloadLabel = state.downloadedUri ? 'Downloaded' : downloading ? 'Downloading…' : episode.sizeBytes ? formatMegabytes(episode.sizeBytes) : 'Download';
 
   const details = (
     <ScrollView

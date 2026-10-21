@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, type PressableProps, type StyleProp, type ViewSt
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 
 /** Every effect is over within this long (springs were left out: they wobble for much longer than they look like they should). */
-export const EFFECT_MS = 1000;
+const EFFECT_MS = 1000;
 
 type Props = Omit<PressableProps, 'style' | 'children'> & {
   children: ReactNode;

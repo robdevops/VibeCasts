@@ -41,6 +41,5 @@ export function useLibraryView() {
     const folderLatest = (folderId: string) =>
       Math.max(0, ...(folderOrder[folderId] ?? []).map((id) => latest[id] ?? 0));
     return { subscriptions, folders, folderOrder, unplayed, latest, members, folderUnplayed, folderLatest, tileKey };
-    // `countsVersion` stands in for the episode states (read above from the store).
   }, [subscriptions, folders, folderOrder, countsVersion, feeds]);
 }

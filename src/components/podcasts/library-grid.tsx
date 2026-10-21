@@ -12,6 +12,7 @@ import { useLibrary } from '@/store/library';
 import { PodcastRow } from './podcast-row';
 import { TileGrid, type GridItem } from './tile-grid';
 import { FolderTile, PodcastTile } from './tiles';
+import { plural } from '@/lib/text';
 
 type Props = {
   /** Tile keys in display order (`p:<id>` / `f:<id>`). */
@@ -109,7 +110,7 @@ export function LibraryGrid({ keys, folderId, layout, canReorder, refreshing, on
             return (
               <PodcastRow
                 title={folder.name}
-                subtitle={`${members.length} podcast${members.length === 1 ? '' : 's'}`}
+                subtitle={plural(members.length, 'podcast')}
                 mosaic={members}
                 unplayed={view.folderUnplayed(id)}
                 onPress={() => open(item)}

@@ -12,11 +12,12 @@ import { ScreenHeader } from '@/components/ui/screen-header';
 import { useTheme } from '@/hooks/use-theme';
 import { downloadsSupported, useDownloads, type DownloadEntry } from '@/downloads/download-manager';
 import { useLibrary } from '@/store/library';
+import { formatMegabytes } from '@/lib/text';
 
 type Row = { key: string; entry: DownloadEntry; status: 'queued' | 'downloading' | 'failed' | 'done'; auto: boolean };
 type Section = { title: string; data: Row[] };
 
-const megabytes = (b?: number) => (b ? `${Math.max(1, Math.round(b / 1_000_000))} MB` : '');
+const megabytes = (b?: number) => (b ? formatMegabytes(b) : '');
 const newestFirst = (a: Row, b: Row) => b.entry.episode.published - a.entry.episode.published;
 
 export default function DownloadsScreen() {

@@ -23,7 +23,6 @@ export function MiniPlayerView() {
   const current = usePlayer((s) => s.current);
   const playing = usePlayer((s) => s.playing);
   const buffering = usePlayer((s) => s.buffering);
-  const fraction = usePlayer((s) => (s.durationSec > 0 ? Math.min(1, s.positionSec / s.durationSec) : 0));
   const skipBack = useSettings((s) => s.skipBackSec);
   const skipForward = useSettings((s) => s.skipForwardSec);
 
@@ -82,11 +81,20 @@ export function MiniPlayerView() {
           </GlowPressable>
         </View>
         {/* Thin progress line along the bottom edge. Display only: seeking happens on the player screen. */}
-        <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no" style={styles.track}>
-          <View style={[styles.trackBg, { backgroundColor: theme.accent }]} />
-          <View style={[styles.fill, { backgroundColor: theme.accent, width: `${fraction * 100}%` }]} />
-        </View>
+        <ProgressLine />
       </View>
+  );
+}
+
+/** Its own component so only this line re-renders on each position tick, not the whole mini player. */
+function ProgressLine() {
+  const theme = useTheme();
+  const fraction = usePlayer((s) => (s.durationSec > 0 ? Math.min(1, s.positionSec / s.durationSec) : 0));
+  return (
+    <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no" style={styles.track}>
+      <View style={[styles.trackBg, { backgroundColor: theme.accent }]} />
+      <View style={[styles.fill, { backgroundColor: theme.accent, width: `${fraction * 100}%` }]} />
+    </View>
   );
 }
 
