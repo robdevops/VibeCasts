@@ -1,56 +1,37 @@
-# Welcome to your Expo app 👋
+# VibeCasts
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A Pocket Casts-style podcast app for Android (and web, for layout checks), with a light purple look in light and dark. Built with Expo as a playground for small app clones.
 
-## Get started
+## Features
 
-1. Install dependencies
+- **Library grid**: square art tiles with unplayed badges, folders, drag to reorder or drop into a folder, word-start search, OPML import and export.
+- **Discovery**: search iTunes, browse charts and categories, or add any feed URL directly.
+- **Player**: persistent mini player that drags up into a full player sheet (Playing / Details / Bookmarks), plus a slide-up episode lobby for any episode.
+- **Reliable playback**: background and lock-screen controls, Bluetooth headset button mapping, sleep timer, skip-first/last, and guards that keep your place.
+- **Downloads and notifications**: manual and automatic downloads with archive/delete rules, and local new-episode alerts.
+- **Playlists**: Up Next queue and named playlists with drag-to-reorder, bookmarks and starred episodes.
+- **Smooth transitions**: folder and show zoom, artwork flight back to the tile, elastic scrolling.
 
-   ```bash
-   npm install
-   ```
+## Tech specs
 
-2. Start the app
+- Expo SDK 57, React Native 0.86, React 19.2 (React Compiler), TypeScript
+- Expo Router (a route group per tab, custom tab bar), zustand stores
+- Reanimated 4 and react-native-gesture-handler
+- `expo-audio` behind a `PlayerEngine` interface, with a patch-package patch for an Android wake lock and headset buttons
+- Data from the iTunes API and RSS (`fast-xml-parser`), with a conditional-GET feed cache
+- Storage: SQLite on native, localStorage on web, through a coalescing writer
+- Jest (`jest-expo`, Testing Library) and Playwright screenshots
 
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **src/app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Commands
 
 ```bash
-npm run reset-project
+npm ci
+npm run web
+npm run dev-client
+npm run check
+npx eas-cli@latest build --profile development --platform android
 ```
 
-This command will move the starter code to the **example** directory and create a blank **src/app** directory where you can start developing.
+`npm run check` runs the typecheck, lint and tests. The EAS build is only needed when native code or `app.json` changes; JavaScript changes reload on their own.
 
-### Other setup steps
-
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+See `CLAUDE.md` for architecture notes.
