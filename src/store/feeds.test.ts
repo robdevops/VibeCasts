@@ -99,6 +99,17 @@ it('backfills imported shows 3 at a time and clears needsMeta through onMeta', a
   expect(s.getState().backfillProgress).toBeNull();
 });
 
+it('backfill can fetch just the shows a caller picks, and shows what it is doing', async () => {
+  const fetchText = jest.fn(async () => sampleFeed);
+  const labels: (string | undefined)[] = [];
+  const s = createFeedStore(createMemoryKV(), fetchText);
+  s.subscribe((st) => labels.push(st.backfillProgress?.label));
+  const pods = [{ ...pod, id: 'a', feedUrl: 'https://f/a', category: 'News' }, { ...pod, id: 'b', feedUrl: 'https://f/b' }];
+  await s.getState().backfill(pods, { need: (p) => !p.category, label: 'Finding categories' });
+  expect(fetchText).toHaveBeenCalledTimes(1);
+  expect(labels).toContain('Finding categories');
+});
+
 describe('conditional refresh (unchanged feeds cost almost nothing)', () => {
   it('sends the saved validators on bulk refreshes and keeps the cache on 304', async () => {
     const calls: (string | undefined)[] = [];

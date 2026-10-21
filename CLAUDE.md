@@ -86,6 +86,10 @@ Vertical lists spread `ELASTIC_SCROLL` (`constants/scroll.ts`: `overScrollMode: 
 - Whole feeds (with show notes) are held in memory (`feeds.full`) for only the 6 most recently fetched or opened shows; bulk refreshes and backfills pass `keepFull: false` and keep just the newest 20 episodes. `useLibraryView` caches each show's unplayed count per feed entry (a landed feed recounts only its own show), and the Podcasts screen passes its sorted keys through `useStableList` so an unchanged order doesn't reach the grid.
 - The Podcasts grid shows `TileSkeleton` until the library has loaded, never "No podcasts yet".
 
+## Auto categorize
+- Sort by menu > "Auto categorize into folders" (`autoCategorize` in `(podcasts)/index.tsx`): fetches the feeds of loose shows with no category (`feeds.backfill` with `need` / `label`), plans with `lib/auto-categorize.ts` (`planCategories`: loose shows only, a new folder needs 2+ shows, a folder with the same name is reused, case-insensitive), asks to confirm, then `library.applyCategories` files them in one update (new folders at the top). Categories are per show (`Podcast.category`: iTunes genre or the feed's first `itunes:category`), not per episode.
+- `MenuSheet` takes `roomy` (about 20% taller) for the two Podcasts menus.
+
 ## Library search, drag from results, visible-first loading
 - Library search is `lib/search.ts` (`searchPodcasts`): a query matches at the start of a word in the title or author ("me" finds Metaverse, not Games).
 - Long-pressing a search result swaps the grid to the whole library (`onDragBegin` in `(podcasts)/index.tsx`); `TileGrid` accepts a new `items` list mid-drag and keeps the gesture. `TileGrid` always renders tiles in `items` order and moves them by slot only (reordering the views under an active touch cancels it on web). A dragged podcast that lives in a folder appears as an extra tile; `library.placeInHome(keys)` sets the order and releases folder membership. The search closes when the drop finishes.

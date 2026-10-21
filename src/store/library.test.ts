@@ -174,3 +174,38 @@ describe('placeInHome (dragging a podcast out of a folder, or up from search, in
     expect(s.getState().folderOrder[f]).toEqual(['2']);
   });
 });
+
+describe('applyCategories', () => {
+  const setup = () => {
+    const s = createLibraryStore(createMemoryKV());
+    for (const id of ['1', '2', '3', '4', '5']) s.getState().subscribe(pod(id));
+    return s;
+  };
+
+  it('makes new folders at the top, reuses existing ones, and files only loose shows', () => {
+    const s = setup();
+    const mine = s.getState().createFolder('Mine', '#fff');
+    s.getState().moveToFolder('5', mine);
+    const news = s.getState().createFolder('News', '#000');
+    s.getState().applyCategories([
+      { name: 'Comedy', podcastIds: ['1', '2'] },
+      { name: 'News', folderId: news, podcastIds: ['3', '5'] },
+    ]);
+    const st = s.getState();
+    const comedy = Object.values(st.folders).find((f) => f.name === 'Comedy')!;
+    expect(st.folderOrder[comedy.id]).toEqual(['1', '2']);
+    expect(st.folderOrder[news]).toEqual(['3']); // 5 was already in a folder: untouched
+    expect(st.folderOrder[mine]).toEqual(['5']);
+    expect(st.subscriptions['1'].folderId).toBe(comedy.id);
+    expect(st.subscriptions['5'].folderId).toBe(mine);
+    expect(st.homeOrder).toEqual([`f:${comedy.id}`, `f:${news}`, `f:${mine}`, 'p:4']);
+  });
+
+  it('does nothing when nothing can move', () => {
+    const s = setup();
+    const before = s.getState().homeOrder;
+    s.getState().applyCategories([{ name: 'X', podcastIds: ['nope'] }]);
+    expect(s.getState().homeOrder).toBe(before);
+    expect(Object.keys(s.getState().folders)).toHaveLength(0);
+  });
+});

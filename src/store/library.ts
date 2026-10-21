@@ -8,6 +8,7 @@ import { emptyEpisodeState, episodeKey, type EpisodeState } from '@/lib/episode-
 import { parseKey, tileKey, type TileRef } from '@/lib/layout';
 import { normalizeFeedUrl, type OpmlFeed } from '@/lib/opml';
 import { rssPodcastId } from '@/lib/podcast-id';
+import type { CategoryGroup } from '@/lib/auto-categorize';
 import type { PodcastSort } from '@/lib/podcast-sort';
 
 export type Subscription = {
@@ -66,6 +67,8 @@ type Actions = {
   createFolder(name: string, color: string): string;
   deleteFolder(folderId: string): void;
   moveToFolder(podcastId: string, folderId: string): void;
+  /** File loose podcasts into folders by category in one update: groups with a `folderId` join it, the others get a new folder. */
+  applyCategories(groups: CategoryGroup[]): void;
   removeFromFolder(podcastId: string): void;
   setHomeOrder(keys: string[]): void;
   /** Set the home order, taking any podcast listed in it out of the folder it was in (a podcast dragged out of a folder, or up from search). */
@@ -247,6 +250,37 @@ export function createLibraryStore(storage: KV = kv) {
           folderOrder,
           homeOrder: s.homeOrder.filter((k) => k !== tileKey({ type: 'podcast', id: podcastId })),
         };
+      });
+    },
+
+    applyCategories(groups) {
+      set((s) => {
+        const subscriptions = { ...s.subscriptions };
+        const folders = { ...s.folders };
+        const folderOrder = { ...s.folderOrder };
+        const moved = new Set<string>();
+        const newKeys: string[] = [];
+        const now = Date.now();
+        groups.forEach((g, i) => {
+          // Only loose shows move: one in a folder of its own stays there.
+          const ids = g.podcastIds.filter((id) => subscriptions[id] && !subscriptions[id].folderId);
+          if (!ids.length) return;
+          let folderId = g.folderId && folders[g.folderId] ? g.folderId : undefined;
+          if (!folderId) {
+            folderId = `${now.toString(36)}${i.toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+            folders[folderId] = { id: folderId, name: g.name, color: FOLDER_COLORS[Object.keys(folders).length % FOLDER_COLORS.length], createdAt: now };
+            folderOrder[folderId] = [];
+            newKeys.push(tileKey({ type: 'folder', id: folderId }));
+          }
+          folderOrder[folderId] = [...(folderOrder[folderId] ?? []), ...ids];
+          for (const id of ids) {
+            subscriptions[id] = { ...subscriptions[id], folderId };
+            moved.add(tileKey({ type: 'podcast', id }));
+          }
+        });
+        if (!moved.size) return s;
+        // New folders go to the top of the grid, as with `createFolder`.
+        return { subscriptions, folders, folderOrder, homeOrder: [...newKeys, ...s.homeOrder.filter((k) => !moved.has(k))] };
       });
     },
 

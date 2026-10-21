@@ -2,6 +2,8 @@ import { useIsFocused } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Keyboard, Platform, StyleSheet, TextInput, View } from 'react-native';
 
+import { planCategories } from '@/lib/auto-categorize';
+import { confirmAsync } from '@/components/ui/confirm';
 import { EmptyLibrary } from '@/components/podcasts/empty-library';
 import { LibraryGrid } from '@/components/podcasts/library-grid';
 import { TileSkeleton } from '@/components/podcasts/tile-skeleton';
@@ -182,6 +184,32 @@ export default function PodcastsScreen() {
     setMenu(null);
   };
 
+  // File the loose shows into folders named after their category. Shows with no category known yet are fetched first.
+  const autoCategorize = async () => {
+    setMenu(null);
+    const loose = () => {
+      const { subscriptions } = useLibrary.getState();
+      return Object.values(subscriptions).filter((s) => !s.folderId).map((s) => s.podcast);
+    };
+    await useFeeds.getState().backfill(loose(), { need: (p) => !p.category, label: 'Finding categories' });
+    const { subscriptions, folders } = useLibrary.getState();
+    const plan = planCategories(
+      Object.values(subscriptions).filter((s) => !s.folderId).map((s) => s.podcast),
+      Object.values(folders),
+    );
+    if (!plan.groups.length) {
+      await confirmAsync('Nothing to sort', 'No loose podcasts share a category yet.', 'OK');
+      return;
+    }
+    const made = plan.groups.filter((g) => !g.folderId).length;
+    const ok = await confirmAsync(
+      'Sort into folders?',
+      `${plan.moved} podcasts go into ${plan.groups.length} folders (${made} new). ${plan.uncategorised} stay on the grid.`,
+      'Sort',
+    );
+    if (ok) useLibrary.getState().applyCategories(plan.groups);
+  };
+
   const mainItems: MenuItem[] = [
     { label: `Sort by: ${SORT_LABELS[sort]}`, icon: 'sort', onPress: () => setMenu('sort') },
     {
@@ -202,11 +230,17 @@ export default function PodcastsScreen() {
     },
   ];
 
-  const sortItems: MenuItem[] = (Object.keys(SORT_LABELS) as PodcastSort[]).map((s) => ({
+  const sortItems: MenuItem[] = (Object.keys(SORT_LABELS) as PodcastSort[]).map((s): MenuItem => ({
     label: SORT_LABELS[s],
     checked: s === sort,
     onPress: () => setSort(s),
-  }));
+  })).concat({
+    label: 'Auto categorize into folders',
+    icon: 'create-new-folder',
+    separator: true,
+    disabled: searching,
+    onPress: () => void autoCategorize(),
+  } as MenuItem);
 
   const headerRight =
     query === null ? (
@@ -243,7 +277,7 @@ export default function PodcastsScreen() {
       {progress ? (
         <View style={[styles.banner, { backgroundColor: theme.accentSoft }]} accessibilityLiveRegion="polite">
           <ThemedText type="small" style={{ color: theme.accent }}>
-            Loading artwork {Math.min(progress.done + 1, progress.total)}/{progress.total}
+            {progress.label ?? 'Loading artwork'} {Math.min(progress.done + 1, progress.total)}/{progress.total}
           </ThemedText>
         </View>
       ) : null}
@@ -268,8 +302,8 @@ export default function PodcastsScreen() {
           }
         />
       </View>
-      <MenuSheet visible={menu === 'main'} items={mainItems} onClose={() => setMenu(null)} />
-      <MenuSheet visible={menu === 'sort'} items={sortItems} title="Sort by" onClose={() => setMenu(null)} />
+      <MenuSheet roomy visible={menu === 'main'} items={mainItems} onClose={() => setMenu(null)} />
+      <MenuSheet roomy visible={menu === 'sort'} items={sortItems} title="Sort by" onClose={() => setMenu(null)} />
       <NamePrompt
         visible={newFolder}
         title="New folder"

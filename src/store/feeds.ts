@@ -44,14 +44,14 @@ type Actions = {
    */
   refreshAll(podcasts: Podcast[], opts?: { onlyStale?: boolean; whileLooking?: boolean }): Promise<void>;
   /** Fetch details for shows added from a file (3 at a time), reporting progress for a banner. */
-  backfill(podcasts: Podcast[], opts?: { whileLooking?: boolean }): Promise<void>;
+  backfill(podcasts: Podcast[], opts?: { whileLooking?: boolean; need?: (p: Podcast) => boolean; label?: string }): Promise<void>;
   /** The podcast ids in the order the screen wants them, most wanted first (asked again before every pick). */
   setPriority(ids: string[]): void;
   /** Is the Podcasts screen on screen with the phone unlocked? Bulk work started with `whileLooking` waits for this. */
   looking: boolean;
   setLooking(looking: boolean): void;
   /** Null when no backfill is running. */
-  backfillProgress: { done: number; total: number } | null;
+  backfillProgress: { done: number; total: number; label?: string } | null;
 };
 
 /** Persisted copy without show notes (the biggest part of a feed); they come back with the next fetch. */
@@ -196,9 +196,10 @@ export function createFeedStore(
 
     async backfill(podcasts, opts) {
       if (get().backfillProgress) return;
-      const todo = podcasts.filter((p) => p.needsMeta && p.feedUrl);
+      const need = opts?.need ?? ((p: Podcast) => !!p.needsMeta);
+      const todo = podcasts.filter((p) => need(p) && p.feedUrl);
       if (!todo.length) return;
-      set({ backfillProgress: { done: 0, total: todo.length } });
+      set({ backfillProgress: { done: 0, total: todo.length, label: opts?.label } });
       const pending = [...todo];
       const worker = async () => {
         for (;;) {

@@ -17,10 +17,10 @@ export type MenuItem = {
   separator?: boolean;
 };
 
-type Props = { visible: boolean; items: MenuItem[]; onClose: () => void; title?: string; anchor?: 'top' | 'bottom'; dark?: boolean };
+type Props = { visible: boolean; items: MenuItem[]; onClose: () => void; title?: string; anchor?: 'top' | 'bottom'; dark?: boolean; roomy?: boolean };
 
 /** Popover menu anchored to the top-right (default) or bottom-right of the screen. */
-export function MenuSheet({ visible, items, onClose, title, anchor = 'top', dark }: Props) {
+export function MenuSheet({ visible, items, onClose, title, anchor = 'top', dark, roomy }: Props) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
@@ -34,6 +34,7 @@ export function MenuSheet({ visible, items, onClose, title, anchor = 'top', dark
         style={[
           styles.card,
           anchor === 'top' ? { top: topOffset, maxHeight } : { bottom: insets.bottom + 100, maxHeight: height - insets.top - insets.bottom - 140 },
+          roomy ? styles.cardRoomy : null,
           { backgroundColor: dark ? '#1E1433' : theme.background, borderColor: dark ? 'rgba(255,255,255,0.15)' : theme.border },
         ]}>
         <ScrollView bounces={false} showsVerticalScrollIndicator={false}>
@@ -52,6 +53,7 @@ export function MenuSheet({ visible, items, onClose, title, anchor = 'top', dark
               onPress={item.onPress}
               style={({ pressed }) => [
                 styles.item,
+                roomy ? styles.itemRoomy : null,
                 { backgroundColor: pressed ? theme.backgroundElement : 'transparent', opacity: item.disabled ? 0.4 : 1 },
               ]}>
               <View style={styles.iconSlot}>
@@ -88,6 +90,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 12,
   },
+  // About 20% taller for a short menu: more air above, below and between the rows.
+  cardRoomy: { paddingTop: 9, paddingBottom: 18 },
+  itemRoomy: { paddingVertical: 16 },
   title: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 },
   item: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, gap: 12 },
   iconSlot: { width: 22 },
