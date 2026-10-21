@@ -11,14 +11,14 @@ describe('planCategories', () => {
       ['Society & Culture', ['6', '7']],
     ]);
     expect(plan.moved).toBe(7);
-    expect(plan.uncategorised).toBe(0);
+    expect(plan.leftLoose).toBe(0);
   });
 
   it('leaves a single show in a category, and shows without one, loose', () => {
     const plan = planCategories([p('1', 'News'), p('2', 'News'), p('3', 'Sports'), p('4'), p('5', '  ')], []);
     expect(plan.groups).toHaveLength(1);
     expect(plan.moved).toBe(2);
-    expect(plan.uncategorised).toBe(3);
+    expect(plan.leftLoose).toBe(3);
   });
 
   it('reuses a folder with the same name, even for a single show', () => {
@@ -32,6 +32,6 @@ describe('planCategories', () => {
   });
 
   it('does nothing for an empty library', () => {
-    expect(planCategories([], [])).toEqual({ groups: [], uncategorised: 0, moved: 0 });
+    expect(planCategories([], [])).toEqual({ groups: [], leftLoose: 0, moved: 0 });
   });
 });

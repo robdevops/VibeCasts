@@ -2,13 +2,12 @@ import { useIsFocused } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Keyboard, Platform, StyleSheet, TextInput, View } from 'react-native';
 
-import { planCategories } from '@/lib/auto-categorize';
-import { confirmAsync } from '@/components/ui/confirm';
 import { EmptyLibrary } from '@/components/podcasts/empty-library';
 import { LibraryGrid } from '@/components/podcasts/library-grid';
 import { TileSkeleton } from '@/components/podcasts/tile-skeleton';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { confirmAsync } from '@/components/ui/confirm';
 import { IconButton } from '@/components/ui/icon-button';
 import { MenuSheet, type MenuItem } from '@/components/ui/menu-sheet';
 import { NamePrompt } from '@/components/ui/name-prompt';
@@ -17,6 +16,7 @@ import { useAppActive } from '@/hooks/use-app-active';
 import { useLibraryView } from '@/hooks/use-library-view';
 import { useStableList } from '@/hooks/use-stable-list';
 import { useTheme } from '@/hooks/use-theme';
+import { planCategories } from '@/lib/auto-categorize';
 import { displayOrder } from '@/lib/display-order';
 import { parseKey } from '@/lib/layout';
 import { ensureThumbs } from '@/artwork/thumbs';
@@ -91,7 +91,7 @@ export default function PodcastsScreen() {
     return sortTiles(tiles, sort);
   }, [homeOrder, sort, view]);
   // Most feed arrivals change nothing about the order: keep the same array so the grid is left alone.
-  const mainKeys = useStableList(sortedKeys) as string[];
+  const mainKeys = useStableList(sortedKeys);
 
   const searchKeys = useMemo(
     () =>
@@ -187,16 +187,12 @@ export default function PodcastsScreen() {
   // File the loose shows into folders named after their category. Shows with no category known yet are fetched first.
   const autoCategorize = async () => {
     setMenu(null);
-    const loose = () => {
-      const { subscriptions } = useLibrary.getState();
-      return Object.values(subscriptions).filter((s) => !s.folderId).map((s) => s.podcast);
-    };
-    await useFeeds.getState().backfill(loose(), { need: (p) => !p.category, label: 'Finding categories' });
-    const { subscriptions, folders } = useLibrary.getState();
-    const plan = planCategories(
-      Object.values(subscriptions).filter((s) => !s.folderId).map((s) => s.podcast),
-      Object.values(folders),
-    );
+    const loosePodcasts = () =>
+      Object.values(useLibrary.getState().subscriptions)
+        .filter((s) => !s.folderId)
+        .map((s) => s.podcast);
+    await useFeeds.getState().backfill(loosePodcasts(), { need: (p) => !p.category, label: 'Finding categories' });
+    const plan = planCategories(loosePodcasts(), Object.values(useLibrary.getState().folders));
     if (!plan.groups.length) {
       await confirmAsync('Nothing to sort', 'No loose podcasts share a category yet.', 'OK');
       return;
@@ -204,7 +200,7 @@ export default function PodcastsScreen() {
     const made = plan.groups.filter((g) => !g.folderId).length;
     const ok = await confirmAsync(
       'Sort into folders?',
-      `${plan.moved} podcasts go into ${plan.groups.length} folders (${made} new). ${plan.uncategorised} stay on the grid.`,
+      `${plan.moved} podcasts go into ${plan.groups.length} folders (${made} new). ${plan.leftLoose} stay on the grid.`,
       'Sort',
     );
     if (ok) useLibrary.getState().applyCategories(plan.groups);
@@ -230,17 +226,10 @@ export default function PodcastsScreen() {
     },
   ];
 
-  const sortItems: MenuItem[] = (Object.keys(SORT_LABELS) as PodcastSort[]).map((s): MenuItem => ({
-    label: SORT_LABELS[s],
-    checked: s === sort,
-    onPress: () => setSort(s),
-  })).concat({
-    label: 'Auto categorize',
-    icon: 'create-new-folder',
-    separator: true,
-    disabled: searching,
-    onPress: () => void autoCategorize(),
-  } as MenuItem);
+  const sortItems: MenuItem[] = [
+    ...(Object.keys(SORT_LABELS) as PodcastSort[]).map((s) => ({ label: SORT_LABELS[s], checked: s === sort, onPress: () => setSort(s) })),
+    { label: 'Auto categorize', icon: 'create-new-folder', separator: true, disabled: searching, onPress: () => void autoCategorize() },
+  ];
 
   const headerRight =
     query === null ? (

@@ -1,5 +1,5 @@
 export type CategoryGroup = { name: string; folderId?: string; podcastIds: string[] };
-export type CategoryPlan = { groups: CategoryGroup[]; uncategorised: number; moved: number };
+export type CategoryPlan = { groups: CategoryGroup[]; leftLoose: number; moved: number };
 
 type Candidate = { id: string; category?: string };
 
@@ -28,5 +28,5 @@ export function planCategories(loose: Candidate[], folders: { id: string; name: 
   const groups = [...byCategory.values()].filter((g) => g.folderId || g.podcastIds.length >= minGroup);
   groups.sort((a, b) => b.podcastIds.length - a.podcastIds.length || a.name.localeCompare(b.name));
   const moved = groups.reduce((n, g) => n + g.podcastIds.length, 0);
-  return { groups, uncategorised: loose.length - moved, moved };
+  return { groups, leftLoose: loose.length - moved, moved };
 }

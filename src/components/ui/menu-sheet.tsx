@@ -50,33 +50,33 @@ export function MenuSheet({ visible, items, onClose, title, anchor = 'top', dark
           showsVerticalScrollIndicator={false}
           style={[styles.scroll, contentH > 0 ? { height: Math.min(contentH, cap) } : null]}>
         <View testID="menu-content" style={styles.pad} onLayout={(e) => setContentH(Math.ceil(e.nativeEvent.layout.height))}>
-        {title ? (
-          <ThemedText type="smallBold" themeColor="textSecondary" style={styles.title}>
-            {title}
-          </ThemedText>
-        ) : null}
-        {items.map((item) => (
-          <View key={item.label}>
-            {item.separator ? <View style={[styles.sep, { backgroundColor: theme.border }]} /> : null}
-            <Pressable
-              accessibilityRole="menuitem"
-              accessibilityState={{ disabled: item.disabled, checked: item.checked }}
-              disabled={item.disabled}
-              onPress={item.onPress}
-              style={({ pressed }) => [
-                styles.item,
-                { backgroundColor: pressed ? theme.backgroundElement : 'transparent', opacity: item.disabled ? 0.4 : 1 },
-              ]}>
-              <View style={styles.iconSlot}>
-                {item.icon ? (
-                  <Icon name={item.icon} size={22} color={item.destructive ? theme.danger : theme.textSecondary} />
-                ) : null}
-              </View>
-              <ThemedText style={{ flex: 1, color: item.destructive ? theme.danger : dark ? '#fff' : theme.text }}>{item.label}</ThemedText>
-              {item.checked ? <Icon name="check" size={20} color={theme.accent} /> : null}
-            </Pressable>
-          </View>
-        ))}
+          {title ? (
+            <ThemedText type="smallBold" themeColor="textSecondary" style={styles.title}>
+              {title}
+            </ThemedText>
+          ) : null}
+          {items.map((item) => (
+            <View key={item.label}>
+              {item.separator ? <View style={[styles.sep, { backgroundColor: theme.border }]} /> : null}
+              <Pressable
+                accessibilityRole="menuitem"
+                accessibilityState={{ disabled: item.disabled, checked: item.checked }}
+                disabled={item.disabled}
+                onPress={item.onPress}
+                style={({ pressed }) => [
+                  styles.item,
+                  { backgroundColor: pressed ? theme.backgroundElement : 'transparent', opacity: item.disabled ? 0.4 : 1 },
+                ]}>
+                <View style={styles.iconSlot}>
+                  {item.icon ? (
+                    <Icon name={item.icon} size={22} color={item.destructive ? theme.danger : theme.textSecondary} />
+                  ) : null}
+                </View>
+                <ThemedText style={{ flex: 1, color: item.destructive ? theme.danger : dark ? '#fff' : theme.text }}>{item.label}</ThemedText>
+                {item.checked ? <Icon name="check" size={20} color={theme.accent} /> : null}
+              </Pressable>
+            </View>
+          ))}
         </View>
         </ScrollView>
       </View>
@@ -101,7 +101,6 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   pad: { paddingTop: 6, paddingBottom: 14 },
-  // Padding lives inside the scroller so the card's height is exactly its content's.
   scroll: { flexGrow: 0 },
   title: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 },
   item: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, gap: 12 },
