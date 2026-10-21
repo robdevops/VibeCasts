@@ -17,14 +17,17 @@ export function configureNotifications() {
   }).catch(() => {});
 }
 
+let permissionGranted = false; // once allowed, later toggles skip the native round trips (posting still checks `canPost`)
+
 /** Ask for permission (Android 13+ and iOS prompt). Call from a user action, never in the background. */
 export async function requestNotificationPermission(): Promise<boolean> {
   if (Platform.OS === 'web') return false;
+  if (permissionGranted) return true;
   try {
     const current = await Notifications.getPermissionsAsync();
-    if (current.granted) return true;
+    if (current.granted) return (permissionGranted = true);
     if (!current.canAskAgain) return false;
-    return (await Notifications.requestPermissionsAsync()).granted;
+    return (permissionGranted = (await Notifications.requestPermissionsAsync()).granted);
   } catch {
     return false;
   }

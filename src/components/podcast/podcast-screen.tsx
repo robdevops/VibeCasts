@@ -246,15 +246,16 @@ export default function PodcastScreen() {
     { label: 'Download newest 10 unplayed', icon: 'file-download', disabled: !downloadsSupported || !podcast, onPress: downloadNewest },
   ]);
 
-  // Turning notifications on asks for permission first (Android 13+ / iOS).
+  // Turning notifications on shows at once and then checks permission (Android 13+ / iOS), turning it back off with a
+  // hint if it is refused. Waiting for the permission check first left the toggle unchanged for seconds whenever the
+  // phone was busy loading feeds.
   const setNotifications = (on: boolean) => {
-    if (!on) {
-      lib.setOverride(id, { notifications: false });
-      return;
-    }
+    lib.setOverride(id, { notifications: on });
+    if (!on) return;
     void requestNotificationPermission().then((ok) => {
-      if (ok) lib.setOverride(id, { notifications: true });
-      else useToast.getState().show('Allow notifications for VibeCasts in system settings to get new-episode alerts');
+      if (ok) return;
+      lib.setOverride(id, { notifications: false });
+      useToast.getState().show('Allow notifications for VibeCasts in system settings to get new-episode alerts');
     });
   };
 
