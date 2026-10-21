@@ -302,8 +302,8 @@ export default function PodcastsScreen() {
           }
         />
       </View>
-      <MenuSheet roomy visible={menu === 'main'} items={mainItems} onClose={() => setMenu(null)} />
-      <MenuSheet roomy visible={menu === 'sort'} items={sortItems} title="Sort by" onClose={() => setMenu(null)} />
+      <MenuSheet visible={menu === 'main'} items={mainItems} onClose={() => setMenu(null)} />
+      <MenuSheet visible={menu === 'sort'} items={sortItems} title="Sort by" onClose={() => setMenu(null)} />
       <NamePrompt
         visible={newFolder}
         title="New folder"

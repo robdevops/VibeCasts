@@ -17,10 +17,10 @@ export type MenuItem = {
   separator?: boolean;
 };
 
-type Props = { visible: boolean; items: MenuItem[]; onClose: () => void; title?: string; anchor?: 'top' | 'bottom'; dark?: boolean; roomy?: boolean };
+type Props = { visible: boolean; items: MenuItem[]; onClose: () => void; title?: string; anchor?: 'top' | 'bottom'; dark?: boolean };
 
 /** Popover menu anchored to the top-right (default) or bottom-right of the screen. */
-export function MenuSheet({ visible, items, onClose, title, anchor = 'top', dark, roomy }: Props) {
+export function MenuSheet({ visible, items, onClose, title, anchor = 'top', dark }: Props) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
@@ -36,7 +36,7 @@ export function MenuSheet({ visible, items, onClose, title, anchor = 'top', dark
           anchor === 'top' ? { top: topOffset, maxHeight } : { bottom: insets.bottom + 100, maxHeight: height - insets.top - insets.bottom - 140 },
           { backgroundColor: dark ? '#1E1433' : theme.background, borderColor: dark ? 'rgba(255,255,255,0.15)' : theme.border },
         ]}>
-        <ScrollView bounces={false} showsVerticalScrollIndicator={false} style={styles.scroll} contentContainerStyle={roomy ? styles.padRoomy : styles.pad}>
+        <ScrollView bounces={false} showsVerticalScrollIndicator={false} style={styles.scroll} contentContainerStyle={styles.pad}>
         {title ? (
           <ThemedText type="smallBold" themeColor="textSecondary" style={styles.title}>
             {title}
@@ -52,7 +52,6 @@ export function MenuSheet({ visible, items, onClose, title, anchor = 'top', dark
               onPress={item.onPress}
               style={({ pressed }) => [
                 styles.item,
-                roomy ? styles.itemRoomy : null,
                 { backgroundColor: pressed ? theme.backgroundElement : 'transparent', opacity: item.disabled ? 0.4 : 1 },
               ]}>
               <View style={styles.iconSlot}>
@@ -87,12 +86,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 12,
   },
-  // A short menu with generous air: about 40% taller than the plain one (3 rows: 164 px to about 230 px). Tune here.
-  padRoomy: { paddingTop: 14, paddingBottom: 24 },
   pad: { paddingTop: 6, paddingBottom: 14 },
   // Padding lives inside the scroller so the card's height is exactly its content's.
   scroll: { flexGrow: 0 },
-  itemRoomy: { paddingVertical: 20 },
   title: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 },
   item: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, gap: 12 },
   iconSlot: { width: 22 },
